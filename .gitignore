@@ -1,0 +1,18 @@
+# Virtualenv: wordt door start.sh opnieuw aangemaakt
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Door de app aangemaakt: geheugen van geziene advertenties en categoriecache
+data/seen_ids.json
+data/seen_ids.json.tmp
+data/categories.json
+
+# Eigen opgeslagen advertentielijsten
+data/saved_lists/
+
+# Losse notities en exports
+*.log
