@@ -42,6 +42,7 @@ from PyQt6.QtWidgets import (
 from core.categories import ALL_CATEGORIES, CategoryStore
 from core.monitor import MarktplaatsMonitor, RateLimited
 from core.saved_lists import SavedListsManager
+from core.secrets import SecretStore
 from core.settings_manager import load_profiles, save_profiles
 from core.telegram_client import send_telegram_message
 from core.translations import get_text
@@ -181,6 +182,7 @@ class MainWindow(QMainWindow):
         self.worker_thread = None
         self.worker = None
 
+        self.secret_store = SecretStore(self.settings)
         self.category_store = CategoryStore()
         self.profiles = load_profiles(self.settings)
         self.notifications = []
@@ -221,6 +223,12 @@ class MainWindow(QMainWindow):
         self.apply_language()
         self.reload_saved_lists()
         self.update_status(False)
+
+        if not self.secret_store.available:
+            self.log(
+                "Geen sleutelbos beschikbaar; de Telegram-token wordt leesbaar "
+                "opgeslagen in het instellingenbestand."
+            )
 
     def t(self, key):
         return get_text(self.current_language, key)
@@ -918,7 +926,7 @@ class MainWindow(QMainWindow):
         self.telegram_enabled.setChecked(
             self.settings.value("telegram/enabled", "false") == "true"
         )
-        self.bot_token.setText(self.settings.value("telegram/bot_token", ""))
+        self.bot_token.setText(self.secret_store.get_token())
         self.chat_id.setText(self.settings.value("telegram/chat_id", ""))
         self.message_prefix.setText(
             self.settings.value("telegram/prefix", "Nieuwe Marktplaats advertentie")
@@ -973,10 +981,10 @@ class MainWindow(QMainWindow):
         self.settings.setValue(
             "telegram/enabled", str(self.telegram_enabled.isChecked()).lower()
         )
-        self.settings.setValue("telegram/bot_token", self.bot_token.text().strip())
+        self.secret_store.set_token(self.bot_token.text())
         self.settings.setValue("telegram/chat_id", self.chat_id.text().strip())
         self.settings.setValue("telegram/prefix", self.message_prefix.text().strip())
-        self.log("Telegram instellingen opgeslagen.")
+        self.log(f"Telegram instellingen opgeslagen. Token in: {self.secret_store.describe()}.")
 
     def test_telegram(self):
         self.save_telegram_settings()

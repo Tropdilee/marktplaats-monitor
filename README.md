@@ -120,6 +120,7 @@ main.py                 startpunt
 core/monitor.py         zoeken, filteren en bijhouden wat al gezien is
 core/categories.py      categorielijst met cache op schijf
 core/telegram_client.py versturen van een Telegram-bericht
+core/secrets.py         token in de sleutelbos van het systeem
 core/saved_lists.py     opgeslagen lijsten als JSON en TXT
 core/settings_manager.py zoekprofielen
 core/translations.py    Nederlandse en Engelse teksten
@@ -131,9 +132,20 @@ data/categories.json    gecachete categorielijst
 data/saved_lists/       opgeslagen lijsten
 ```
 
-Instellingen staan in QSettings (op Linux onder
-`~/.config/PerplexityLocal/`). De Telegram-token wordt daar in leesbare vorm
-bewaard.
+Instellingen staan in QSettings (op Linux onder `~/.config/PerplexityLocal/`).
+
+De Telegram-token staat daar bewust niet bij: die gaat naar de sleutelbos van
+het systeem (GNOME Keyring of KWallet op Linux, Keychain op macOS, Credential
+Manager op Windows). Stond er nog een token in het instellingenbestand van een
+oudere versie, dan verhuist die bij de eerste start en wordt de leesbare kopie
+verwijderd. Is er geen sleutelbos beschikbaar, dan valt de app terug op
+QSettings en zegt dat in de log, zodat je weet dat de token dan leesbaar op
+schijf staat. Het chat-ID blijft gewoon in QSettings staan: dat is een
+adres, geen sleutel.
+
+De sleutelbos beschermt tegen meelezen, back-ups en per ongeluk delen. Het
+beschermt niet tegen software die al onder jouw eigen account draait, want die
+mag de sleutelbos net zo goed openen.
 
 `data/seen_ids.json` verwijderen betekent dat de volgende scan weer een eerste
 scan is: die stuurt geen meldingen en onthoudt alles opnieuw.
