@@ -45,7 +45,13 @@ from core.monitor import MarktplaatsMonitor, RateLimited
 from core.saved_lists import SavedListsManager
 from core.secrets import SecretStore
 from core.settings_manager import load_profiles, save_profiles
-from core.telegram_client import send_telegram_message
+from core.telegram_client import (
+    describe_error,
+    find_chat_ids,
+    get_bot_info,
+    looks_like_token,
+    send_telegram_message,
+)
 from core.translations import get_text
 from ui.dialogs import SearchProfileDialog, AppearanceDialog
 from ui.theme import ThemeConfig, build_stylesheet, system_font_family
@@ -570,11 +576,14 @@ class MainWindow(QMainWindow):
         row = QHBoxLayout()
         self.telegram_save_btn = QPushButton("Telegram opslaan")
         self.telegram_test_btn = QPushButton("Telegram test")
+        self.telegram_chatid_btn = QPushButton("Chat ID ophalen")
         self.telegram_save_btn.clicked.connect(self.save_telegram_settings)
         self.telegram_test_btn.clicked.connect(self.test_telegram)
+        self.telegram_chatid_btn.clicked.connect(self.fetch_chat_id)
 
         row.addWidget(self.telegram_save_btn)
         row.addWidget(self.telegram_test_btn)
+        row.addWidget(self.telegram_chatid_btn)
         layout.addLayout(row)
         layout.addStretch(1)
         return w
@@ -1021,23 +1030,100 @@ class MainWindow(QMainWindow):
         self.log(f"Telegram instellingen opgeslagen. Token in: {self.secret_store.describe()}.")
 
     def test_telegram(self):
+        """Controleer eerst de token, daarna pas het chat ID.
+
+        Anders levert elke fout dezelfde onduidelijke melding op en weet je niet
+        welk van de twee velden je moet nakijken.
+        """
         self.save_telegram_settings()
         token = self.bot_token.text().strip()
         chat_id = self.chat_id.text().strip()
+
         if not token or not chat_id:
             QMessageBox.warning(self, "Telegram", self.t("telegram_test_fill"))
             return
+
+        if not looks_like_token(token):
+            uitleg = (
+                "Deze token heeft niet de vorm die BotFather geeft "
+                "(cijfers, dubbele punt, dan een lange reeks letters).\n\n"
+                f"Ingevuld: {len(token)} tekens"
+                f"{', met een spatie erin' if ' ' in token else ''}."
+            )
+            self.log(f"Telegram test: {uitleg.splitlines()[0]}")
+            QMessageBox.warning(self, "Telegram", uitleg)
+            return
+
+        ok, data = get_bot_info(token)
+        if not ok:
+            uitleg = describe_error(data)
+            self.log(f"Telegram test mislukt: {uitleg}")
+            QMessageBox.warning(self, "Telegram", uitleg)
+            return
+
+        botnaam = (data.get("result") or {}).get("username", "?")
+
         ok, data = send_telegram_message(
-            token,
-            chat_id,
-            f"Testbericht vanuit {APP_NAME} v{APP_VERSION}",
+            token, chat_id, f"Testbericht vanuit {APP_NAME} v{APP_VERSION}"
         )
         if ok:
-            QMessageBox.information(self, "Telegram", self.t("telegram_test_ok"))
-        else:
-            QMessageBox.warning(
-                self, "Telegram", f"{self.t('telegram_test_fail')}: {data}"
+            self.log(f"Telegram test geslaagd via @{botnaam}.")
+            QMessageBox.information(
+                self, "Telegram", f"{self.t('telegram_test_ok')}\n\nBot: @{botnaam}"
             )
+        else:
+            uitleg = describe_error(data)
+            self.log(f"Telegram test mislukt: {uitleg}")
+            QMessageBox.warning(
+                self, "Telegram", f"De token werkt (@{botnaam}), maar:\n\n{uitleg}"
+            )
+
+    def fetch_chat_id(self):
+        """Zoek het chat ID op uit de berichten die de bot net heeft gekregen."""
+        self.save_telegram_settings()
+        token = self.bot_token.text().strip()
+
+        if not looks_like_token(token):
+            QMessageBox.warning(
+                self, "Telegram", "Vul eerst een geldige bot token in."
+            )
+            return
+
+        ok, data, chats = find_chat_ids(token)
+        if not ok:
+            QMessageBox.warning(self, "Telegram", describe_error(data))
+            return
+
+        if not chats:
+            QMessageBox.information(
+                self,
+                "Telegram",
+                "Geen recente berichten gevonden.\n\nStuur je bot eerst een "
+                "bericht in Telegram (bijvoorbeeld /start) en probeer het "
+                "daarna opnieuw.",
+            )
+            return
+
+        if len(chats) == 1:
+            chat_id, naam = chats[0]
+            self.chat_id.setText(chat_id)
+            self.save_telegram_settings()
+            QMessageBox.information(
+                self, "Telegram", f"Chat ID ingevuld: {chat_id} ({naam})"
+            )
+            return
+
+        keuze, akkoord = QInputDialog.getItem(
+            self,
+            "Telegram",
+            "Meerdere chats gevonden:",
+            [f"{naam} — {chat_id}" for chat_id, naam in chats],
+            0,
+            False,
+        )
+        if akkoord and keuze:
+            self.chat_id.setText(keuze.rsplit("—", 1)[-1].strip())
+            self.save_telegram_settings()
 
     def apply_view_options(self):
         self.results_table.setColumnHidden(3, not self.show_prices.isChecked())

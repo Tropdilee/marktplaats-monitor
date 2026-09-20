@@ -92,6 +92,26 @@ staat, is niet zojuist geplaatst. Gezien-advertenties worden bewaard in
 komt. Elke combinatie van zoekterm, categorie en promotie-instelling heeft een
 eigen geschiedenis.
 
+## Telegram instellen
+
+1. Praat in Telegram met [@BotFather](https://t.me/BotFather) en stuur `/newbot`.
+   Je krijgt een token in de vorm `123456789:AAE...` — neem die in één stuk over.
+2. Zoek je eigen bot op in Telegram en stuur hem `/start`. Zonder dat mag de bot
+   jou geen berichten sturen.
+3. Vul de token in op het tabblad Telegram en klik op **Chat ID ophalen**. De app
+   leest het ID uit de berichten die de bot net van je heeft gekregen.
+4. Klik op **Telegram test**. Bij succes zie je de naam van je bot.
+
+De testknop controleert eerst de token en daarna pas het chat ID, zodat een fout
+aanwijst welk veld niet klopt:
+
+| Melding van Telegram | Wat er aan de hand is |
+| --- | --- |
+| 404 Not Found | De token heeft niet de vorm van een token: leeg, half geplakt of met een spatie |
+| 401 Unauthorized | De vorm klopt, maar de bot bestaat niet meer; vraag `/token` bij BotFather |
+| chat not found | Het chat ID klopt niet |
+| 403 Forbidden | Je hebt de bot nog geen `/start` gestuurd |
+
 ## Verzoeken beperken
 
 Marktplaats publiceert geen limiet en stuurt geen rate-limit-headers, dus de app
