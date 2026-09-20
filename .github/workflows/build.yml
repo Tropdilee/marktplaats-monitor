@@ -49,24 +49,12 @@ jobs:
       - name: Run the self-test
         # Checks inside the built app that Qt, the data folder, the keyring and
         # the connection to Marktplaats work. Without a graphical session Qt runs
-        # here without a window.
+        # here without a window. The check lives in a script rather than inline,
+        # because the Windows runner uses PowerShell where a heredoc does not
+        # parse.
         env:
           QT_QPA_PLATFORM: offscreen
-        run: |
-          python - <<'PY'
-          import subprocess, sys, glob, os
-          candidates = glob.glob("dist/**/MIAW Marktplaats Monitor", recursive=True)
-          candidates += glob.glob("dist/**/MIAW Marktplaats Monitor.exe", recursive=True)
-          executables = [c for c in candidates if os.path.isfile(c)]
-          if not executables:
-              sys.exit("no built app found")
-          r = subprocess.run([executables[0], "--selftest"], capture_output=True, text=True)
-          print(r.stdout or r.stderr)
-          # The Telegram and keyring checks cannot pass on a build machine; only
-          # a crash is a problem here.
-          if "self-test" not in (r.stdout or "") and "zelftest" not in (r.stdout or ""):
-              sys.exit("the app did not start")
-          PY
+        run: python packaging/ci_selftest.py
 
       - name: Package (Linux/macOS)
         if: matrix.label != 'windows'
