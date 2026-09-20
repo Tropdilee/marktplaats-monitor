@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bouwt de Linux-versie. Draai dit op Linux.
+# Builds the Linux version. Run this on Linux.
 set -euo pipefail
 cd "$(dirname "$(readlink -f "$0")")/.."
 
@@ -10,10 +10,10 @@ python3 -m venv .venv-build
 rm -rf build dist
 .venv-build/bin/python -m PyInstaller packaging/miaw.spec --noconfirm
 
-# Alles in één tar.gz, klaar om door te geven.
+# Everything in one tar.gz, ready to hand over.
 cd dist
 tar czf "MIAW-Marktplaats-Monitor-linux.tar.gz" "MIAW Marktplaats Monitor"
 cd ..
 echo
-echo "Klaar: dist/MIAW-Marktplaats-Monitor-linux.tar.gz"
-echo "Uitpakken en starten met:  './MIAW Marktplaats Monitor/MIAW Marktplaats Monitor'"
+echo "Done: dist/MIAW-Marktplaats-Monitor-linux.tar.gz"
+echo "Unpack and start with:  './MIAW Marktplaats Monitor/MIAW Marktplaats Monitor'"

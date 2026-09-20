@@ -1,17 +1,16 @@
-"""Marktplaats zoek-backend.
+"""Marktplaats search backend.
 
-Gebruikt de interne zoek-API van Marktplaats (/lrp/api/search) in plaats van het
-scrapen van de HTML-pagina. Die API respecteert wel de filters die de gebruiker
-in de app instelt:
+Uses the internal Marktplaats search API (/lrp/api/search) rather than scraping
+the HTML page. That API does honour the filters the user sets in the app:
 
-- sortering op nieuwste eerst (sortBy=SORT_INDEX, sortOrder=DECREASING)
-- afstand rondom een postcode (distanceMeters + postcode)
-- maximale prijs (attributeRanges[]=PriceCents:0:N)
-- meer dan 30 resultaten via offset-paginering
+- sorting newest first (sortBy=SORT_INDEX, sortOrder=DECREASING)
+- distance around a postcode (distanceMeters + postcode)
+- maximum price (attributeRanges[]=PriceCents:0:N)
+- more than 30 results through offset paging
 
-Als de API onverhoopt niet bereikbaar is, valt de module terug op het uitlezen
-van het __NEXT_DATA__-blok van de gewone zoekpagina. Dat levert dezelfde
-datastructuur op, alleen ongefilterd en maximaal 30 resultaten.
+Should the API be unreachable, the module falls back to reading the
+__NEXT_DATA__ block from the ordinary search page. That yields the same data
+structure, only unfiltered and capped at 30 results.
 """
 
 import json
@@ -32,30 +31,28 @@ USER_AGENT = (
 API_URL = "https://www.marktplaats.nl/lrp/api/search"
 WEB_URL = "https://www.marktplaats.nl/q/{term}/"
 
-# De API weigert een limit boven de 100; grotere aantallen halen we op via offset.
+# The API refuses a limit above 100; larger counts are fetched through offset.
 MAX_API_LIMIT = 100
 MAX_PAGES = 10
 
-# Harde ondergrens tussen twee verzoeken, ongeacht wat de app vraagt. Marktplaats
-# publiceert geen limiet, dus we blijven ruim onder wat een mens met de hand zou
-# doen. Zonder deze vloer kan een korte interval of een bulk-scan een reeks
-# verzoeken in een paar seconden wegsturen, en dat is precies wat een
-# beveiligingsfilter eruit pikt.
+# Hard lower bound between two requests, whatever the app asks for. Marktplaats
+# publishes no limit, so we stay well below what a person would do by hand.
+# Without this floor a short interval or a bulk scan could fire a burst of
+# requests within seconds, which is exactly what a security filter picks up on.
 MIN_SECONDS_BETWEEN_REQUESTS = 5.0
 
-# Advertenties die we langer dan dit niet meer in de resultaten zien, vergeten we
-# weer. Zo blijft het geheugenbestand klein zonder dat oude advertenties opnieuw
-# als "nieuw" binnenkomen.
+# Listings we have not seen in the results for longer than this are forgotten
+# again. That keeps the memory file small without old listings coming back in
+# as "new".
 SEEN_RETENTION_SECONDS = 30 * 24 * 3600
 
-# Betaalde promotie. Marktplaats zet de datum van zo'n advertentie elke dag
-# weer op "Vandaag", waardoor een oude advertentie bovenaan de sortering op
-# nieuwste blijft staan. Bij een zoekterm als "racefiets" zijn 29 van de eerste
-# 30 resultaten promoties, en dan komt een echt nieuwe advertentie het venster
-# niet eens in.
+# Paid promotion. Marktplaats resets such a listing's date to "Vandaag" every
+# day, which keeps an old listing at the top of the newest-first ordering. For a
+# search like "racefiets", 29 of the first 30 results are promotions, and a
+# genuinely new listing never even enters the window.
 PROMOTED_PRIORITY = "DAGTOPPER"
 
-# priceType -> (label, telt als prijs voor het maximum-prijsfilter)
+# priceType -> (label, counts as a price for the maximum-price filter)
 PRICE_TYPE_LABELS = {
     "FIXED": (None, True),
     "MIN_BID": ("bieden vanaf", True),
@@ -70,7 +67,7 @@ PRICE_TYPE_LABELS = {
 
 
 class RateLimited(RuntimeError):
-    """Marktplaats houdt de verzoeken tegen (429, of een 403 van het filter ervoor)."""
+    """Marktplaats is holding requests back (429, or a 403 from the filter in front)."""
 
     def __init__(self, message, retry_after=None):
         super().__init__(message)
@@ -90,8 +87,8 @@ class MarktplaatsMonitor:
         )
         self._last_request_at = 0.0
 
-        # Categorielijst uit het laatste antwoord, zodat de app die kan tonen
-        # zonder er een apart verzoek voor te doen.
+        # Category list from the last response, so the app can show it without
+        # making a separate request for it.
         self.last_category_options = []
         self.last_subcategories = []
 
@@ -99,19 +96,19 @@ class MarktplaatsMonitor:
             state_path = data_file("seen_ids.json")
         self.state_path = Path(state_path)
 
-        # {zoekterm: {advertentie-id: laatst gezien (unix-tijd)}}
+        # {search term: {listing id: last seen (unix time)}}
         self._seen = self._load_state()
 
-        # Wordt True als de laatste cyclus een eerste scan was: dan is alles als
-        # gezien weggeschreven zonder meldingen te sturen.
+        # Becomes True when the last cycle was a first scan: everything was then
+        # recorded as seen without sending any notifications.
         self.last_scan_was_priming = False
 
-        # Wordt True als het zoeken gestopt is omdat er na het filteren niets
-        # bruikbaars meer kwam, bijvoorbeeld bij een zoekterm vol promoties.
+        # Becomes True when the search stopped because nothing usable came back
+        # after filtering, for instance with a search full of promotions.
         self.last_search_exhausted = False
 
     # ------------------------------------------------------------------
-    # Opslag van welke advertenties al gezien zijn
+    # Keeping track of which listings have already been seen
     # ------------------------------------------------------------------
 
     def _load_state(self):
@@ -144,23 +141,23 @@ class MarktplaatsMonitor:
             )
             tmp.replace(self.state_path)
         except OSError:
-            # Niet kunnen opslaan mag de monitor nooit laten crashen; we draaien
-            # dan simpelweg verder op het geheugen van deze sessie.
+            # Failing to save must never crash the monitor; we simply carry on
+            # with this session's in-memory state.
             pass
 
     @staticmethod
     def _state_key(term, category_id=None, subcategory_id=None, hide_promoted=True):
-        """Sleutel waaronder gezien-advertenties bewaard worden.
+        """Key under which seen listings are stored.
 
-        De categorie hoort erbij: dezelfde zoekterm in een andere categorie is
-        een andere zoekopdracht, en die begint dus met een eigen eerste scan in
-        plaats van met een golf meldingen.
+        The category belongs in it: the same search term in a different category
+        is a different search, and therefore starts with its own first scan
+        instead of a wave of notifications.
         """
         key = " ".join(str(term or "").lower().split())
         if not hide_promoted:
-            # Promoties aanzetten laat advertenties zien die nog nooit in beeld
-            # zijn geweest. Een eigen sleutel zorgt dat die niet in één klap als
-            # "nieuw" de deur uit gaan.
+            # Turning promotions on reveals listings that have never been in
+            # view. A separate key keeps those from going out as "new" all at
+            # once.
             key += "|promo"
         if category_id:
             key += f"|c{int(category_id)}"
@@ -169,26 +166,26 @@ class MarktplaatsMonitor:
         return key
 
     def has_seen_term(self, term, category_id=None, subcategory_id=None, hide_promoted=True):
-        """True als deze zoekopdracht eerder gescand is."""
+        """True when this search has been scanned before."""
         return bool(
             self._seen.get(self._state_key(term, category_id, subcategory_id, hide_promoted))
         )
 
     def forget_term(self, term, category_id=None, subcategory_id=None, hide_promoted=True):
-        """Vergeet de geschiedenis van één zoekopdracht; de volgende scan begint schoon."""
+        """Forget one search's history; the next scan starts clean."""
         self._seen.pop(self._state_key(term, category_id, subcategory_id, hide_promoted), None)
         self._save_state()
 
     @property
     def seen_ids(self):
-        """Alle bekende advertentie-ids, over alle zoektermen heen."""
+        """Every known listing id, across all search terms."""
         ids = set()
         for entry in self._seen.values():
             ids.update(entry.keys())
         return ids
 
     # ------------------------------------------------------------------
-    # Opbouwen van de zoekopdracht
+    # Building the search request
     # ------------------------------------------------------------------
 
     def build_search_params(
@@ -207,29 +204,29 @@ class MarktplaatsMonitor:
             "query": term,
             "limit": int(limit),
             "offset": int(offset),
-            # Nieuwste advertenties eerst; zonder deze twee komt Marktplaats met
-            # een relevantie-sortering waarin een verse advertentie makkelijk
-            # buiten de eerste pagina valt.
+            # Newest listings first; without these two Marktplaats returns a
+            # relevance ordering in which a fresh listing easily falls outside
+            # the first page.
             "sortBy": "SORT_INDEX",
             "sortOrder": "DECREASING",
         }
 
         if free_only:
-            # Scheelt een hoop ophalen en weggooien. De server laat hier ook
-            # biedingen vanaf € 0 door, dus we filteren daarna nog op priceType.
+            # Saves a lot of fetching and discarding. The server also lets bids
+            # starting at EUR 0 through here, so we filter on priceType after.
             params["attributeRanges[]"] = "PriceCents:0:0"
         elif max_price and float(max_price) > 0:
             cents = int(round(float(max_price) * 100))
             params["attributeRanges[]"] = f"PriceCents:0:{cents}"
 
-        # Het afstandsfilter werkt alleen als postcode en straal samen meegaan.
+        # The distance filter only works when postcode and radius travel together.
         if region and distance_km and int(distance_km) > 0:
             params["postcode"] = str(region).strip().replace(" ", "").upper()
             params["distanceMeters"] = int(distance_km) * 1000
 
-        # Let op de schrijfwijze: de hoofdcategorie gaat als los getal mee, de
-        # subcategorie als lijst. Een subcategorie zonder hoofdcategorie wordt
-        # door Marktplaats genegeerd.
+        # Mind the spelling: the main category goes as a plain number, the
+        # subcategory as a list. A subcategory without a main category is
+        # ignored by Marktplaats.
         if category_id:
             params["l1CategoryId"] = int(category_id)
             if subcategory_id:
@@ -238,10 +235,10 @@ class MarktplaatsMonitor:
         return params
 
     def build_search_url(self, term, max_price=None, limit=None, region=None, distance_km=None):
-        """Bouw de zoek-URL zoals een bezoeker die in de browser ziet.
+        """Build the search URL as a visitor sees it in the browser.
 
-        Wordt gebruikt voor de HTML-fallback en om de gebruiker een klikbare
-        link te kunnen tonen.
+        Used for the HTML fallback and to be able to show the user a clickable
+        link.
         """
         url = WEB_URL.format(term=quote_plus(str(term)))
 
@@ -253,9 +250,9 @@ class MarktplaatsMonitor:
         if query:
             url += "?" + "&".join(query)
 
-        # Marktplaats zet het afstandsfilter zelf in het URL-fragment. Let op:
-        # een fragment wordt nooit naar de server gestuurd, dus dit is puur voor
-        # weergave in de browser - het filter zelf gaat via de API.
+        # Marktplaats itself puts the distance filter in the URL fragment. Note
+        # that a fragment is never sent to the server, so this is purely for
+        # display in the browser - the filter itself goes through the API.
         if region and distance_km and int(distance_km) > 0:
             url += (
                 f"#distanceMeters:{int(distance_km) * 1000}"
@@ -265,11 +262,11 @@ class MarktplaatsMonitor:
         return url
 
     # ------------------------------------------------------------------
-    # Ophalen
+    # Fetching
     # ------------------------------------------------------------------
 
     def _throttle(self):
-        """Wacht zo nodig tot er weer een verzoek gedaan mag worden."""
+        """Wait, if needed, until another request may be made."""
         wait = MIN_SECONDS_BETWEEN_REQUESTS - (time.monotonic() - self._last_request_at)
         if wait > 0:
             time.sleep(wait)
@@ -297,7 +294,7 @@ class MarktplaatsMonitor:
                     return resp.json()
 
                 if resp.status_code in (403, 429):
-                    # Hier niet blijven proberen: dat maakt het alleen erger.
+                    # Do not keep retrying here: that only makes it worse.
                     raise RateLimited(
                         f"Marktplaats blokkeert de verzoeken (HTTP {resp.status_code}). "
                         "Zet de interval hoger en probeer het later opnieuw.",
@@ -338,12 +335,12 @@ class MarktplaatsMonitor:
         try:
             offset = 0
             for _ in range(MAX_PAGES):
-                # Altijd een volle pagina opvragen, ook als er nog maar een
-                # paar resultaten nodig zijn. Eén verzoek van 100 kost hetzelfde
-                # als een verzoek van 30, maar scheelt pagina's - en elke pagina
-                # kost door de wachttijd tussen verzoeken zo'n 5 seconden. Met
-                # een streng filter zoals "alleen gratis" scheelt dat het
-                # verschil tussen acht en drie ronden.
+                # Always request a full page, even when only a few results are
+                # still needed. One request of 100 costs the same as a request
+                # of 30, but saves pages - and each page costs about 5 seconds
+                # because of the wait between requests. With a strict filter
+                # such as "free only" that is the difference between eight
+                # rounds and three.
                 page_size = MAX_API_LIMIT
                 params = self.build_search_params(
                     term,
@@ -370,16 +367,15 @@ class MarktplaatsMonitor:
                 if len(collected) >= wanted or len(listings) < page_size:
                     break
 
-                # Sommige zoektermen staan honderden resultaten diep vol met
-                # promoties ("auto" bijvoorbeeld). Dan blijft doorbladeren tot
-                # MAX_PAGES tien verzoeken kosten zonder één bruikbaar
-                # resultaat. Twee lege pagina's op rij is genoeg bewijs dat
-                # verder zoeken niets meer oplevert.
+                # Some searches are full of promotions hundreds of results deep
+                # ("auto", for example). Paging on to MAX_PAGES then costs ten
+                # requests without a single usable result. Two empty pages in a
+                # row is enough evidence that searching further yields nothing.
                 empty_pages = empty_pages + 1 if len(collected) == before else 0
                 if empty_pages >= 2:
                     self.last_search_exhausted = True
                     break
-                # Rustig aan tegen de server bij grote bulk-scans.
+                # Go easy on the server during large bulk scans.
                 time.sleep(0.5)
         except Exception:
             if collected:
@@ -393,10 +389,10 @@ class MarktplaatsMonitor:
         return collected
 
     def _remember_categories(self, data):
-        """Pik de categorielijsten uit een zoekantwoord.
+        """Pick the category lists out of a search response.
 
-        Scheelt een apart verzoek: de hoofdcategorieën en de subcategorieën die
-        bij deze zoekterm horen zitten al in het antwoord.
+        Saves a separate request: the main categories and the subcategories
+        belonging to this search term are already in the response.
         """
         options = data.get("searchCategoryOptions")
         if isinstance(options, list) and options:
@@ -407,8 +403,8 @@ class MarktplaatsMonitor:
             if not isinstance(facet, dict) or facet.get("type") != "CategoryTreeFacet":
                 continue
             for cat in facet.get("categories") or []:
-                # Alleen echte subcategorieën; de hoofdcategorie staat er zonder
-                # parentId tussen.
+                # Real subcategories only; the main category sits among them
+                # without a parentId.
                 if isinstance(cat, dict) and cat.get("parentId") and cat.get("label"):
                     subcategories.append(
                         {
@@ -421,7 +417,7 @@ class MarktplaatsMonitor:
         self.last_subcategories = subcategories
 
     def _fetch_listings_html(self, term, max_price, limit):
-        """Terugvaloptie: lees de listings uit het __NEXT_DATA__-blok van de webpagina."""
+        """Fallback: read the listings from the web page's __NEXT_DATA__ block."""
         url = self.build_search_url(term, max_price, limit)
         resp = self.session.get(url, timeout=25, headers={"Accept": "text/html"})
         resp.raise_for_status()
@@ -440,16 +436,16 @@ class MarktplaatsMonitor:
         return []
 
     # ------------------------------------------------------------------
-    # Normaliseren
+    # Normalising
     # ------------------------------------------------------------------
 
     def _normalize_page(
         self, raw_items, max_price, free_only, limit, seen_ids, out, hide_promoted=True
     ):
-        """Zet één pagina API-resultaten om en hang ze achter `out`.
+        """Convert one page of API results and append them to `out`.
 
-        `seen_ids` loopt over de pagina's heen mee, zodat een advertentie die op
-        twee pagina's opduikt maar één keer in de lijst belandt.
+        `seen_ids` carries across pages, so a listing appearing on two pages ends
+        up in the list only once.
         """
         for raw in raw_items:
             if len(out) >= limit:
@@ -462,13 +458,13 @@ class MarktplaatsMonitor:
             if not item_id or item_id in seen_ids:
                 continue
 
-            # Advertentie-ids die met 'a' beginnen zijn Admarkt-advertenties van
-            # externe webshops. Die staan vaak niet eens in de gezochte categorie.
+            # Listing ids starting with 'a' are Admarkt ads from external web
+            # shops. They are often not even in the category being searched.
             if item_id.startswith("a"):
                 continue
 
-            # Promoties vullen anders het hele venster met advertenties die al
-            # dagen bestaan, zodat er nooit iets nieuws in beeld komt.
+            # Otherwise promotions fill the entire window with listings that
+            # are already days old, so nothing new ever comes into view.
             if hide_promoted and raw.get("priorityProduct") == PROMOTED_PRIORITY:
                 continue
 
@@ -526,7 +522,7 @@ class MarktplaatsMonitor:
         if price_type == "FREE":
             return 0.0, "Gratis", price_type
 
-        # Een bod vanaf € 0 is geen richtprijs maar gewoon "bieden".
+        # A bid starting at EUR 0 is not a guide price, just "make an offer".
         if price_type == "MIN_BID" and not value:
             return None, "Bieden", price_type
 
@@ -536,8 +532,9 @@ class MarktplaatsMonitor:
                 text = f"{text} ({label})"
             return value, text, price_type
 
-        # Bieden zonder richtprijs, n.o.t.k., enzovoort: geen bruikbaar bedrag,
-        # dus price_value blijft leeg en het maximum-prijsfilter slaat dit over.
+        # Bidding without a guide price, price on request, and so on: no usable
+        # amount, so price_value stays empty and the maximum-price filter skips
+        # this entry.
         return None, label or "Zie advertentie", price_type
 
     @staticmethod
@@ -585,7 +582,7 @@ class MarktplaatsMonitor:
         return re.sub(r"\s+", " ", str(text)).strip()
 
     # ------------------------------------------------------------------
-    # Nieuwe advertenties bepalen
+    # Determining which listings are new
     # ------------------------------------------------------------------
 
     def get_new_items(
@@ -600,12 +597,12 @@ class MarktplaatsMonitor:
         subcategory_id=None,
         hide_promoted=True,
     ):
-        """Haal resultaten op en bepaal welke daarvan nieuw zijn.
+        """Fetch results and work out which of them are new.
 
-        De allereerste scan van een zoekterm levert bewust geen nieuwe items op:
-        alles wat er op dat moment staat is immers niet "zojuist geplaatst".
-        Zonder die stap zou elke herstart van de app een melding per resultaat
-        opleveren. Of dit gebeurd is, staat in `last_scan_was_priming`.
+        The very first scan of a search term deliberately yields no new items:
+        whatever is listed at that moment was not "just posted" after all.
+        Without that step every restart of the app would produce a notification
+        per result. Whether this happened is recorded in `last_scan_was_priming`.
         """
         items = self.fetch_listings(
             term,

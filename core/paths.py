@@ -1,15 +1,15 @@
-"""Waar de app zijn gegevens bewaart.
+"""Where the application stores its data.
 
-Tijdens het ontwikkelen staat alles in de map `data/` naast de broncode. Dat is
-handig, maar in een gebundelde app (PyInstaller) wijst `__file__` naar een
-tijdelijke map die bij het afsluiten weer verdwijnt en waar bovendien niet in
-geschreven mag worden. Daar hoort een echte gebruikersmap bij:
+While developing, everything lives in the `data/` folder next to the source.
+That is convenient, but in a bundled app (PyInstaller) `__file__` points at a
+temporary folder that disappears on exit and cannot be written to anyway. That
+case needs a real per-user folder:
 
-- Linux   ~/.local/share/MIAW Marktplaats Monitor
-- Windows C:\\Users\\<naam>\\AppData\\Roaming\\PerplexityLocal\\MIAW Marktplaats Monitor
-- macOS   ~/Library/Application Support/MIAW Marktplaats Monitor
+- Linux   ~/.local/share/PerplexityLocal/MIAW Marktplaats Monitor
+- Windows C:\\Users\\<name>\\AppData\\Local\\PerplexityLocal\\MIAW Marktplaats Monitor
+- macOS   ~/Library/Application Support/PerplexityLocal/MIAW Marktplaats Monitor
 
-QStandardPaths kiest die per systeem, dus daar is geen extra pakket voor nodig.
+QStandardPaths picks the right one per system, so no extra package is needed.
 """
 
 import sys
@@ -23,17 +23,17 @@ FALLBACK_DIR_NAME = ".miaw-marktplaats-monitor"
 
 
 def is_frozen():
-    """True als de app als gebundelde executable draait."""
+    """True when the app is running as a bundled executable."""
     return bool(getattr(sys, "frozen", False))
 
 
 def data_dir():
-    """De map waar gegevens in geschreven mogen worden."""
+    """The folder that data may be written to."""
     if is_frozen():
-        # Bewust GenericDataLocation plus de eigen namen erachter. AppDataLocation
-        # plakt die namen er alleen aan als een QApplication ze al gezet heeft, en
-        # bij `--selftest` bestaat die nog niet - dan belandde alles los in
-        # ~/.local/share.
+        # Deliberately GenericDataLocation plus our own names appended.
+        # AppDataLocation only appends those names once a QApplication has set
+        # them, and under `--selftest` no such application exists yet - which
+        # dumped everything loose into ~/.local/share.
         locatie = QStandardPaths.writableLocation(
             QStandardPaths.StandardLocation.GenericDataLocation
         )
@@ -48,12 +48,12 @@ def data_dir():
     try:
         pad.mkdir(parents=True, exist_ok=True)
     except OSError:
-        # Niet kunnen aanmaken mag de app niet tegenhouden; de losse onderdelen
-        # vangen een mislukte schrijfactie zelf op.
+        # Failing to create it must not stop the app; the individual parts
+        # handle a failed write themselves.
         pass
     return pad
 
 
 def data_file(*delen):
-    """Pad naar een bestand of map binnen de gegevensmap."""
+    """Path to a file or folder inside the data folder."""
     return data_dir().joinpath(*delen)

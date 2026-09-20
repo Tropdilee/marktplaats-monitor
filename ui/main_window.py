@@ -61,22 +61,22 @@ from ui.theme import ThemeConfig, build_stylesheet, system_font_family
 
 ALL_SUBCATEGORIES = "Alle subcategorieën"
 
-# Onder deze interval gaat de monitor niet. Marktplaats noemt zelf geen limiet,
-# dus de veiligste koers is een tempo dat niet opvalt naast gewoon browsen.
+# The monitor never goes below this interval. Marktplaats names no limit itself,
+# so the safest course is a pace that does not stand out next to ordinary
+# browsing.
 MIN_INTERVAL_SECONDS = 30
 
-# Nederlandse postcode: vier cijfers (niet met 0 beginnend), eventueel gevolgd
-# door twee letters. Marktplaats neemt beide vormen aan.
+# Dutch postcode: four digits (not starting with 0), optionally followed by two
+# letters. Marktplaats accepts both forms.
 POSTCODE_PATTERN = re.compile(r"^[1-9]\d{3}\s*([A-Za-z]{2})?$")
 
 
 class MaskedTokenEdit(QLineEdit):
-    """Toont de bot token als sterretjes, met alleen de laatste tekens leesbaar.
+    """Shows the bot token as asterisks, with only the last characters readable.
 
-    Zodra je in het veld klikt komt de echte token terug om te kunnen plakken of
-    bijwerken; daarbuiten staat er niets bruikbaars in beeld. De echte waarde
-    wordt apart bijgehouden, zodat opslaan nooit per ongeluk de sterretjes
-    wegschrijft.
+    Clicking into the field brings the real token back so it can be pasted or
+    edited; outside that, nothing usable is on screen. The real value is tracked
+    separately, so saving never accidentally writes the asterisks.
     """
 
     ZICHTBARE_TEKENS = 4
@@ -95,7 +95,7 @@ class MaskedTokenEdit(QLineEdit):
             self._toon_masker()
 
     def value(self):
-        """De echte token, ook als het veld sterretjes laat zien."""
+        """The real token, even while the field shows asterisks."""
         if self._gemaskeerd:
             return self._waarde
         return self.text().strip()
@@ -166,19 +166,19 @@ class MonitorWorker(QObject):
             )
             self.finished.emit(new_items, all_items, "")
         except RateLimited as e:
-            # Apart gemarkeerd zodat het venster de monitor kan stilleggen.
+            # Flagged separately so the window can stop the monitor.
             self.finished.emit([], [], f"RATE_LIMIT|{e}")
         except Exception as e:
             self.finished.emit([], [], f"{type(e).__name__}: {e}")
 
 
 class TelegramSender(QThread):
-    """Verstuurt Telegram-berichten buiten de GUI-thread om.
+    """Sends Telegram messages off the GUI thread.
 
-    Meldingen gingen eerder direct vanuit de GUI-thread de deur uit, waardoor
-    het venster bij een reeks nieuwe advertenties seconden bevroor. De wachtrij
-    houdt er meteen rekening mee dat Telegram maar een beperkt aantal berichten
-    per minuut naar dezelfde chat accepteert.
+    Notifications used to go out straight from the GUI thread, which froze the
+    window for seconds on a run of new listings. The queue also accounts for
+    Telegram accepting only a limited number of messages per minute to the same
+    chat.
     """
 
     logged = pyqtSignal(str)
@@ -218,19 +218,19 @@ class TelegramSender(QThread):
 
 
 class MainWindow(QMainWindow):
-    # Boven dit aantal gaat de rest van een cyclus als één samenvatting mee.
+    # Above this count the rest of a cycle goes out as a single summary.
     MAX_TELEGRAM_MESSAGES_PER_CYCLE = 10
 
-    # Variatie op de interval, zodat het opvragen geen exact ritme krijgt.
+    # Jitter on the interval, so requests never fall into an exact rhythm.
     INTERVAL_JITTER = 0.2
 
-    # Hoeveel de interval per lege cyclus oploopt zolang er niets nieuws is.
+    # How much the interval grows per empty cycle while nothing is new.
     ADAPTIVE_GROWTH = 1.5
 
-    # Standaardduur van de "Nieuw"-markering in de resultaten, in minuten.
+    # Default lifetime of the "new" marker in the results, in minutes.
     DEFAULT_NEW_MARKER_MINUTES = 15
 
-    # Afmeting van het miniatuur in de resultatenlijst.
+    # Thumbnail size in the results list.
     THUMBNAIL_SIZE = QSize(64, 48)
 
     def __init__(self):
@@ -255,23 +255,23 @@ class MainWindow(QMainWindow):
         )
         self.current_results = []
         self.current_saved_items = []
-        # Aangevinkte advertenties overleven zo een refresh van de tabel.
+        # Ticked listings survive a refresh of the table this way.
         self.checked_ids = set()
 
-        # {advertentie-id: moment waarop hij voor het eerst opdook}
+        # {listing id: moment it first showed up}
         self.new_since = {}
 
-        # Huidige wachttijd tussen twee checks; loopt op als er niets nieuws is.
+        # Current wait between two checks; grows while nothing is new.
         self.current_interval_seconds = None
         self.empty_cycles = 0
         self.in_quiet_period = False
 
-        # De leeftijd in de markering loopt door, ook als er geen cyclus draait.
+        # The age in the marker keeps running, even with no cycle in progress.
         self.marker_timer = QTimer(self)
         self.marker_timer.timeout.connect(self.refresh_new_markers)
         self.marker_timer.start(30000)
 
-        # url -> QPixmap, alleen aan te raken vanaf de GUI-thread.
+        # url -> QPixmap, only to be touched from the GUI thread.
         self.image_cache = {}
         self.image_loader = ImageLoader(parent=self)
         self.image_loader.loaded.connect(self.on_image_loaded)
@@ -327,7 +327,7 @@ class MainWindow(QMainWindow):
     def build_ui(self):
         root = QWidget()
         outer = QVBoxLayout(root)
-        # Marges en spacing compacter, maar nog één lege regel rond de titel
+        # Tighter margins and spacing, but still one blank line around the title
         outer.setContentsMargins(0, 2, 0, 4)
         outer.setSpacing(2)
 
@@ -343,14 +343,14 @@ class MainWindow(QMainWindow):
         self.subtitle_label.setObjectName("appSubtitle")
         self.subtitle_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        # Statuslabel staat onder de startknop in de search-tab, niet meer in de header
+        # The status label sits under the start button on the search tab, no longer in the header
         self.status_label = QLabel()
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
 
         outer.addWidget(self.title_label)
         outer.addWidget(self.subtitle_label)
-        # Zonder deze twee eisen de labels een deel van de vrije ruimte op en
-        # ontstaat er een leeg gat tussen de titel en de tabbladen.
+        # Without these two the labels claim part of the free space, leaving an
+        # empty gap between the title and the tabs.
         self.title_label.setSizePolicy(
             QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed
         )
@@ -408,8 +408,8 @@ class MainWindow(QMainWindow):
         self.search_term = QLineEdit()
         self.region = QLineEdit()
 
-        # Hoofdcategorie komt uit de opgeslagen lijst; de subcategorieën horen
-        # bij de zoekterm en worden na elke zoekopdracht bijgewerkt.
+        # The main category comes from the stored list; subcategories belong to
+        # the search term and are refreshed after every search.
         self.category = QComboBox()
         self.category.addItems(self.category_store.names())
         self.category.currentTextChanged.connect(self.on_category_changed)
@@ -418,7 +418,7 @@ class MainWindow(QMainWindow):
         self.subcategory.addItem(ALL_SUBCATEGORIES)
         self.subcategory.setEnabled(False)
 
-        # Afstand rondom regio (in km)
+        # Distance around the region (in km)
         self.distance = QSpinBox()
         self.distance.setRange(0, 250)
         self.distance.setSuffix(" km")
@@ -433,16 +433,16 @@ class MainWindow(QMainWindow):
         self.interval.setRange(MIN_INTERVAL_SECONDS, 3600)
         self.interval.setSuffix(" sec")
 
-        # Adaptieve interval: rustig aan als er niets gebeurt, meteen weer snel
-        # zodra er een nieuwe advertentie langskomt.
+        # Adaptive interval: take it easy while nothing happens, back to full
+        # speed the moment a new listing appears.
         self.adaptive_enabled = QCheckBox()
         self.max_interval_label = QLabel()
         self.max_interval = QSpinBox()
         self.max_interval.setRange(1, 60)
         self.max_interval.setSuffix(" min")
 
-        # Nachtpauze: in de uren dat je er toch niets mee doet hoeft er niets
-        # opgevraagd te worden.
+        # Quiet hours: during the hours you would not act on a find anyway,
+        # nothing needs to be requested.
         self.quiet_enabled = QCheckBox()
         self.quiet_label = QLabel()
         self.quiet_from = QTimeEdit()
@@ -503,9 +503,9 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(self.search_group)
 
-        # Een verkeerde regio of een afstand van 0 wordt door Marktplaats
-        # stilzwijgend genegeerd: je krijgt dan resultaten uit het hele land
-        # zonder dat er iets misgaat. Vandaar deze waarschuwing in beeld.
+        # A wrong region or a distance of 0 is silently ignored by Marktplaats:
+        # you then get results from the whole country without anything visibly
+        # going wrong. Hence this warning on screen.
         self.region_warning = QLabel()
         self.region_warning.setObjectName("regionWarning")
         self.region_warning.setWordWrap(True)
@@ -696,15 +696,15 @@ class MainWindow(QMainWindow):
         header.setSectionsMovable(False)
         header.setStretchLastSection(False)
         header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
-        # De titel is de kolom die je echt wilt lezen, dus die krijgt de ruimte.
+        # The title is the column you actually want to read, so it gets the space.
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(7, QHeaderView.ResizeMode.Interactive)
-        # Smal houden: de link is via dubbelklik en de knop te openen, de
-        # volledige URL staat in de preview.
+        # Keep it narrow: the link opens by double click and by the button, and
+        # the full URL is in the preview.
         self.results_table.setColumnWidth(7, 90)
 
-        # Zonder dit breken lange titels en links over meerdere regels af en
-        # worden de rijen zo hoog dat er nog maar een handvol in beeld past.
+        # Without this, long titles and links wrap across several lines and the
+        # rows grow so tall that only a handful fit on screen.
         self.results_table.setWordWrap(False)
         self.results_table.setTextElideMode(Qt.TextElideMode.ElideRight)
 
@@ -775,12 +775,11 @@ class MainWindow(QMainWindow):
         return w
 
     def region_problem(self):
-        """Beschrijf wat er mis is met het locatiefilter, of geef "" als het klopt.
+        """Describe what is wrong with the location filter, or "" when it is fine.
 
-        Marktplaats accepteert alleen een postcode, en alleen samen met een
-        afstand. Alles daarbuiten wordt genegeerd zonder foutmelding, dus zonder
-        deze controle lijkt het filter te werken terwijl je resultaten uit het
-        hele land binnenkrijgt.
+        Marktplaats accepts a postcode only, and only together with a distance.
+        Anything else is ignored without an error, so without this check the
+        filter looks like it works while results come in from the whole country.
         """
         region = self.region.text().strip()
         distance = self.distance.value()
@@ -801,7 +800,7 @@ class MainWindow(QMainWindow):
         self.region_warning.setVisible(bool(problem))
 
     def confirm_region_problem(self):
-        """Vraag door als het locatiefilter niet gaat werken. True = toch zoeken."""
+        """Ask first when the location filter will not work. True = search anyway."""
         problem = self.region_problem()
         if not problem:
             return True
@@ -825,7 +824,7 @@ class MainWindow(QMainWindow):
         return self.subcategory.currentData()
 
     def reload_category_combo(self):
-        """Ververs de hoofdcategorieën zonder de keuze van de gebruiker kwijt te raken."""
+        """Refresh the main categories without losing the user's choice."""
         current = self.category.currentText()
         self.category.blockSignals(True)
         self.category.clear()
@@ -834,14 +833,14 @@ class MainWindow(QMainWindow):
         self.category.blockSignals(False)
 
     def on_category_changed(self, _name=None):
-        # Subcategorieën horen bij één hoofdcategorie, dus bij het wisselen
-        # daarvan is de oude lijst niet meer geldig.
+        # Subcategories belong to one main category, so switching that one makes
+        # the old list invalid.
         self.subcategory.clear()
         self.subcategory.addItem(ALL_SUBCATEGORIES)
         self.subcategory.setEnabled(False)
 
     def refresh_subcategories(self):
-        """Vul de subcategorieën met wat de laatste zoekopdracht opleverde."""
+        """Fill the subcategories with what the last search returned."""
         category_id = self.selected_category_id()
         if not category_id:
             return
@@ -958,7 +957,7 @@ class MainWindow(QMainWindow):
 
     def apply_theme(self):
         t = self.theme()
-        # Leeg betekent: laat Qt zelf het systeemlettertype kiezen.
+        # Empty means: let Qt pick the system font itself.
         font_family = self.settings.value("ui/font_family", "") or system_font_family()
         font_size = int(self.settings.value("ui/font_size", 10))
         QApplication.instance().setFont(QFont(font_family, font_size))
@@ -987,7 +986,7 @@ class MainWindow(QMainWindow):
         self.quiet_to.setTime(
             QTime.fromString(self.settings.value("search/quiet_to", "07:00"), "HH:mm")
         )
-        # Eén instelling, twee vakjes; telegram_enabled wordt hieronder gezet.
+        # One setting, two checkboxes; telegram_enabled is set further below.
         self.use_notifications.setChecked(
             self.settings.value("telegram/enabled", "false") == "true"
         )
@@ -1085,11 +1084,11 @@ class MainWindow(QMainWindow):
         self.log(self.t("log_telegram_saved").format(opslag=self.secret_store.describe()))
 
     def set_telegram_enabled(self, aan):
-        """Houd de twee vinkjes gelijk.
+        """Keep the two checkboxes in step.
 
-        Hetzelfde vakje staat op het tabblad Zoeken en op het tabblad Telegram.
-        Eerder waren dat twee losse instellingen die allebei aan moesten staan,
-        met dezelfde tekst erbij - dan zet je er één aan en gebeurt er niets.
+        The same checkbox appears on the Search tab and on the Telegram tab.
+        They used to be two separate settings that both had to be on, carrying
+        the same label - so you tick one and nothing happens.
         """
         for vakje in (self.use_notifications, self.telegram_enabled):
             if vakje.isChecked() != aan:
@@ -1099,10 +1098,10 @@ class MainWindow(QMainWindow):
         self.settings.setValue("telegram/enabled", str(bool(aan)).lower())
 
     def test_telegram(self):
-        """Controleer eerst de token, daarna pas het chat ID.
+        """Check the token first, and only then the chat ID.
 
-        Anders levert elke fout dezelfde onduidelijke melding op en weet je niet
-        welk van de twee velden je moet nakijken.
+        Otherwise every failure produces the same vague message and you cannot
+        tell which of the two fields needs looking at.
         """
         self.save_telegram_settings()
         token = self.bot_token.value()
@@ -1150,7 +1149,7 @@ class MainWindow(QMainWindow):
             )
 
     def fetch_chat_id(self):
-        """Zoek het chat ID op uit de berichten die de bot net heeft gekregen."""
+        """Look up the chat ID from the messages the bot just received."""
         self.save_telegram_settings()
         token = self.bot_token.value()
 
@@ -1206,13 +1205,13 @@ class MainWindow(QMainWindow):
         )
         hoogte = 26 if self.compact_mode.isChecked() else 34
         if toont_beeld:
-            # Rij moet het miniatuur kwijt kunnen, met een paar pixels lucht.
+            # The row must fit the thumbnail, with a few pixels of breathing room.
             hoogte = max(hoogte, self.THUMBNAIL_SIZE.height() + 8)
         self.results_table.verticalHeader().setDefaultSectionSize(hoogte)
 
     def set_language(self, lang):
         self.current_language = lang
-        # Ook de losse vensters en de verzend-thread halen hun tekst hier op.
+        # The separate windows and the sender thread take their text from here too.
         set_language(lang)
         self.settings.setValue("ui/language", lang)
         for action in self.language_group:
@@ -1284,7 +1283,7 @@ class MainWindow(QMainWindow):
 
         limit = self.results_limit.value()
         if limit <= 100:
-            # Elke start begint weer op de ingestelde snelheid.
+            # Every start begins at the configured speed again.
             self.reset_interval()
             self.in_quiet_period = False
 
@@ -1314,10 +1313,10 @@ class MainWindow(QMainWindow):
             self.run_monitor_cycle()
 
     def next_interval_ms(self):
-        """Interval met wat ruis erop.
+        """Interval with some noise on it.
 
-        Precies elke 60 seconden een verzoek is een patroon dat een mens nooit
-        produceert; met wat spreiding lijkt het op gewoon gebruik.
+        A request exactly every 60 seconds is a pattern no person ever produces;
+        with some spread it looks like ordinary use.
         """
         base = self.current_interval_seconds or max(
             MIN_INTERVAL_SECONDS, self.interval.value()
@@ -1326,19 +1325,19 @@ class MainWindow(QMainWindow):
         return int(random.uniform(base - spread, base + spread) * 1000)
 
     def reset_interval(self):
-        """Zet de wachttijd terug op wat de gebruiker heeft ingesteld."""
+        """Reset the wait to whatever the user configured."""
         self.current_interval_seconds = max(
             MIN_INTERVAL_SECONDS, self.interval.value()
         )
         self.empty_cycles = 0
 
     def adapt_interval(self, found_new):
-        """Pas de wachttijd aan op hoe vaak er echt iets nieuws verschijnt.
+        """Adapt the wait to how often something new actually appears.
 
-        Een smalle zoekopdracht levert misschien een paar advertenties per dag
-        op. Daar elke minuut voor terugkomen is verspilde moeite, dus bij stilte
-        loopt de wachttijd op. Zodra er wél iets nieuws is, gaat hij meteen weer
-        terug naar de ingestelde snelheid.
+        A narrow search might yield a few listings a day. Coming back every
+        minute for that is wasted effort, so during silence the wait grows. As
+        soon as something new does turn up, it returns to the configured speed
+        immediately.
         """
         base = max(MIN_INTERVAL_SECONDS, self.interval.value())
 
@@ -1368,7 +1367,7 @@ class MainWindow(QMainWindow):
             )
 
     def quiet_period_active(self, now=None):
-        """Valt dit moment binnen de ingestelde nachtpauze?"""
+        """Does this moment fall within the configured quiet hours?"""
         if not self.quiet_enabled.isChecked():
             return False
 
@@ -1380,7 +1379,7 @@ class MainWindow(QMainWindow):
             return False
         if start < end:
             return start <= now < end
-        # De pauze loopt over middernacht heen, bijvoorbeeld 23:00 tot 07:00.
+        # The pause runs across midnight, for example 23:00 to 07:00.
         return now >= start or now < end
 
     def seconds_until_quiet_end(self, now=None):
@@ -1413,8 +1412,8 @@ class MainWindow(QMainWindow):
             self.log(self.t("no_term"))
             return
 
-        # Tijdens de nachtpauze niets opvragen. De timer wordt in één keer op het
-        # einde van de pauze gezet, zodat er ook geen wekkers blijven afgaan.
+        # Request nothing during quiet hours. The timer is set straight to the
+        # end of the pause, so no alarms keep going off either.
         if self.timer.isActive() and self.quiet_period_active():
             wait = self.seconds_until_quiet_end()
             self.timer.start(int(wait * 1000))
@@ -1437,8 +1436,8 @@ class MainWindow(QMainWindow):
         self.is_refreshing = True
         self.start_btn.setEnabled(False)
         self.check_now_btn.setEnabled(False)
-        # Een cyclus kan door de wachttijd tussen verzoeken een paar seconden
-        # duren. Zonder dit lijkt het venster te hangen.
+        # Because of the wait between requests a cycle can take a few seconds.
+        # Without this the window looks like it has hung.
         self.status_label.setText(self.t("status_searching"))
 
         self.worker_thread = QThread()
@@ -1464,15 +1463,15 @@ class MainWindow(QMainWindow):
     def on_monitor_finished(self, new_items, all_items, error):
         if error.startswith("RATE_LIMIT|"):
             message = error.split("|", 1)[1]
-            # Doorgaan zou de blokkade alleen verlengen.
+            # Carrying on would only prolong the block.
             self.timer.stop()
             self.update_status(False)
             self.log(self.t("log_monitor_blocked").format(reden=message))
             QMessageBox.warning(self, self.t("monitor_error"), message)
         elif error:
             self.log(f"{self.t('monitor_error')}: {error}")
-            # Tijdens het monitoren alleen loggen: een modaal venster per mislukte
-            # cyclus stapelt zich op zodra het internet even wegvalt.
+            # Only log while monitoring: one modal window per failed cycle piles
+            # up the moment the connection drops for a while.
             if not self.timer.isActive():
                 QMessageBox.warning(self, self.t("monitor_error"), error)
         else:
@@ -1492,9 +1491,9 @@ class MainWindow(QMainWindow):
 
             if getattr(self.monitor, "last_scan_was_priming", False):
                 self.log(self.t("log_first_scan").format(aantal=len(all_items)))
-                # Een eerste scan levert per definitie geen nieuwe advertenties
-                # op. Dat is geen stilte, dus de interval hoort op de ingestelde
-                # snelheid te blijven staan in plaats van meteen op te lopen.
+                # A first scan yields no new listings by definition. That is not
+                # silence, so the interval should stay at the configured speed
+                # instead of growing straight away.
                 self.reset_interval()
             else:
                 self.notify_new_items(new_items)
@@ -1506,7 +1505,7 @@ class MainWindow(QMainWindow):
         self.update_status(self.timer.isActive())
 
         if self.timer.isActive():
-            # Elke cyclus een nieuwe spreiding op de interval.
+            # Fresh jitter on the interval for every cycle.
             self.timer.start(self.next_interval_ms())
 
         if self.worker_thread is not None:
@@ -1517,7 +1516,7 @@ class MainWindow(QMainWindow):
         self.worker = None
 
     def notify_new_items(self, new_items):
-        """Meld nieuwe advertenties in de app en, als dat aanstaat, via Telegram."""
+        """Report new listings in the app and, when enabled, through Telegram."""
         for item in new_items:
             self.add_notification(f"{self.t('new_ad')}: {item['title']}")
 
@@ -1532,9 +1531,9 @@ class MainWindow(QMainWindow):
 
         overflow = len(new_items) - self.MAX_TELEGRAM_MESSAGES_PER_CYCLE
         if overflow > 0:
-            # Een brede zoekterm kan in één cyclus tientallen nieuwe advertenties
-            # opleveren. Die één voor één sturen loopt tegen de limieten van
-            # Telegram aan, dus de rest gaat als één samenvatting mee.
+            # A broad search can produce dozens of new listings in one cycle.
+            # Sending those one by one runs into Telegram's limits, so the rest
+            # goes out as a single summary.
             summary = "\n".join(
                 f"- {i['title']} ({i['price']}) {i['url']}"
                 for i in new_items[self.MAX_TELEGRAM_MESSAGES_PER_CYCLE :]
@@ -1544,12 +1543,12 @@ class MainWindow(QMainWindow):
             )
 
     def remember_new_items(self, new_items):
-        """Onthoud wanneer een advertentie voor het eerst langskwam.
+        """Remember when a listing first came past.
 
-        De markering in de Statuskolom hing eerder aan één cyclus: keek je net
-        niet op dat moment, dan was er niets meer aan te zien. Met dit geheugen
-        blijft een verse advertentie een tijdje herkenbaar, inclusief hoe lang
-        geleden hij verscheen.
+        The marker in the status column used to last a single cycle: if you
+        happened not to be looking at that moment, there was nothing left to
+        see. With this memory a fresh listing stays recognisable for a while,
+        including how long ago it appeared.
         """
         now = time.time()
         for item in new_items:
@@ -1563,14 +1562,14 @@ class MainWindow(QMainWindow):
         return self.new_marker_minutes.value() * 60
 
     def on_new_marker_duration_changed(self):
-        """Korter zetten moet meteen zichtbaar zijn, niet pas na de volgende cyclus."""
+        """Shortening it must show immediately, not only after the next cycle."""
         cutoff = time.time() - self.new_marker_seconds()
         for item_id in [k for k, t in self.new_since.items() if t < cutoff]:
             del self.new_since[item_id]
         self.refresh_new_markers()
 
     def new_marker(self, item_id):
-        """Tekst voor de Statuskolom, of "" als de advertentie niet vers meer is."""
+        """Text for the status column, or "" when the listing is no longer fresh."""
         first_seen = self.new_since.get(item_id)
         if first_seen is None:
             return ""
@@ -1585,7 +1584,7 @@ class MainWindow(QMainWindow):
         selected_id = self.selected_result_id()
 
         self.results_table.setSortingEnabled(False)
-        # Tijdens het opnieuw vullen mag itemChanged de vinkjes niet bijwerken.
+        # While repopulating, itemChanged must not update the ticked set.
         self.results_table.blockSignals(True)
         self.results_table.setRowCount(0)
 
@@ -1619,8 +1618,8 @@ class MainWindow(QMainWindow):
             for offset, val in enumerate(vals, start=1):
                 twi = QTableWidgetItem(str(val))
                 if offset == 2:
-                    # Het miniatuur hangt aan de titelcel, zodat de bestaande
-                    # kolomindeling ongemoeid blijft.
+                    # The thumbnail hangs off the title cell, leaving the
+                    # existing column layout untouched.
                     self.attach_thumbnail(twi, item.get("image", ""))
                 if offset == 6 and val and self.auto_mark.isChecked():
                     twi.setForeground(QColor(self.theme().success))
@@ -1630,7 +1629,7 @@ class MainWindow(QMainWindow):
         self.apply_view_options()
 
         if items:
-            # Blijf op de advertentie staan die de gebruiker aan het bekijken was.
+            # Stay on the listing the user was looking at.
             row = self.row_for_id(selected_id)
             self.results_table.selectRow(row)
             self.show_result_preview(row)
@@ -1674,7 +1673,7 @@ class MainWindow(QMainWindow):
             self.preview_image.hide()
 
     def attach_thumbnail(self, cell, image_url):
-        """Zet het miniatuur op een cel, of vraag het op als het er nog niet is."""
+        """Put the thumbnail on a cell, or request it when not yet available."""
         if not image_url or not self.show_images.isChecked():
             return
 
@@ -1686,7 +1685,7 @@ class MainWindow(QMainWindow):
             self.image_loader.request(url)
 
     def on_image_loaded(self, url, image):
-        """Een afbeelding is binnen; bewaren en in beeld zetten."""
+        """An image has arrived; store it and put it on screen."""
         pixmap = QPixmap.fromImage(image).scaled(
             self.THUMBNAIL_SIZE,
             Qt.AspectRatioMode.KeepAspectRatio,
@@ -1697,7 +1696,7 @@ class MainWindow(QMainWindow):
         if not self.show_images.isChecked():
             return
 
-        # Zowel de lijst als de preview kunnen op deze afbeelding wachten.
+        # Both the list and the preview may be waiting for this image.
         self.results_table.blockSignals(True)
         for row in range(self.results_table.rowCount()):
             id_cell = self.results_table.item(row, 1)
@@ -1719,7 +1718,7 @@ class MainWindow(QMainWindow):
             )
 
     def show_preview_image(self, image_url):
-        """Toon de grotere afbeelding boven de preview-tekst."""
+        """Show the larger image above the preview text."""
         if not image_url or not self.show_images.isChecked():
             self.preview_image.clear()
             self.preview_image.hide()
@@ -1751,10 +1750,10 @@ class MainWindow(QMainWindow):
         )
 
     def refresh_new_markers(self):
-        """Werk alleen de Statuskolom bij, zodat de leeftijd blijft kloppen.
+        """Update the status column only, so the age stays correct.
 
-        Ook als er niets meer te markeren valt moet deze lus draaien: anders
-        blijft een verlopen markering in beeld staan.
+        This loop must run even when there is nothing left to mark: otherwise an
+        expired marker stays on screen.
         """
         if self.is_refreshing:
             return
@@ -1771,8 +1770,8 @@ class MainWindow(QMainWindow):
                 if marker and self.auto_mark.isChecked():
                     status_cell.setForeground(QColor(self.theme().success))
                 else:
-                    # Kleur terugzetten, anders houdt een lege cel de opmaak
-                    # van de verlopen markering.
+                    # Reset the colour, otherwise an emptied cell keeps the
+                    # styling of the expired marker.
                     status_cell.setForeground(QColor(self.theme().text))
         self.results_table.blockSignals(False)
 
@@ -1811,7 +1810,7 @@ class MainWindow(QMainWindow):
         self.preview_box.setPlainText("\n".join(lines))
 
     def get_selected_result_items(self):
-        """De aangevinkte advertenties, met alle velden uit het zoekresultaat."""
+        """The ticked listings, with every field from the search result."""
         selected = []
         for row in range(self.results_table.rowCount()):
             checkbox = self.results_table.item(row, 0)

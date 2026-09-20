@@ -173,6 +173,11 @@ TRANSLATIONS = {
         "st_failed": "{aantal} onderdeel(en) niet in orde.",
         "st_saved_as": "Verslag ook opgeslagen als:",
         "st_unexpected": "onverwachte fout",
+        "tg_err_404": "De bot token wordt niet herkend als token. Hij hoort eruit te zien als 123456789:AAE... — controleer of de hele regel uit BotFather is overgenomen, in één stuk en zonder spaties.",
+        "tg_err_401": "De bot token heeft de juiste vorm maar wordt afgewezen. Waarschijnlijk is hij ingetrokken of vervangen. Vraag met /token bij BotFather een nieuwe op.",
+        "tg_err_chat": "Het chat ID klopt niet. Stuur je bot eerst een bericht en haal het juiste ID op via de knop 'Chat ID ophalen'.",
+        "tg_err_blocked": "De bot mag jou geen berichten sturen. Open de chat met je bot en stuur /start.",
+        "tg_err_chatid": "Het chat ID ontbreekt of heeft een verkeerde vorm.",
     },
     "English": {
         "title": "MIAW Marktplaats Monitor",
@@ -348,6 +353,11 @@ TRANSLATIONS = {
         "st_failed": "{aantal} item(s) not in order.",
         "st_saved_as": "Report also saved as:",
         "st_unexpected": "unexpected error",
+        "tg_err_404": "The bot token is not recognised as a token. It should look like 123456789:AAE... — check that the whole line from BotFather was copied, in one piece and without spaces.",
+        "tg_err_401": "The bot token has the right shape but is rejected. It has probably been revoked or replaced. Request a new one with /token from BotFather.",
+        "tg_err_chat": "The chat ID is wrong. Send your bot a message first and fetch the right ID with the 'Fetch chat ID' button.",
+        "tg_err_blocked": "The bot is not allowed to message you. Open the chat with your bot and send /start.",
+        "tg_err_chatid": "The chat ID is missing or has the wrong shape.",
     },
 }
 
@@ -357,9 +367,9 @@ def get_text(language, key):
     return lang_map.get(key, TRANSLATIONS["Nederlands"].get(key, key))
 
 
-# De gekozen taal, zodat ook losse vensters (zoekprofiel, uiterlijk) en de
-# zelftest bij de teksten kunnen zonder dat het hoofdvenster meegegeven hoeft
-# te worden.
+# The selected language, so that separate windows (search profile, appearance)
+# and the self-test can reach the texts without having the main window passed
+# to them.
 _current_language = "Nederlands"
 
 
@@ -374,5 +384,5 @@ def current_language():
 
 
 def tr(key):
-    """Tekst in de nu ingestelde taal."""
+    """Text in the currently selected language."""
     return get_text(_current_language, key)

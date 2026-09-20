@@ -1,4 +1,4 @@
-# Virtualenv: wordt door start.sh opnieuw aangemaakt
+# Virtualenv: recreated by start.sh
 .venv/
 venv/
 
@@ -6,21 +6,21 @@ venv/
 __pycache__/
 *.py[cod]
 
-# Door de app aangemaakt: geheugen van geziene advertenties en categoriecache
+# Created by the app: memory of seen listings and the category cache
 data/seen_ids.json
 data/seen_ids.json.tmp
 data/categories.json
 
-# Eigen opgeslagen advertentielijsten
+# Your own saved listing lists
 data/saved_lists/
 
-# Losse notities en exports
+# Loose notes and exports
 *.log
 
-# Gecachete advertentie-afbeeldingen
+# Cached listing images
 data/image_cache/
 
-# Bouwmappen van PyInstaller
+# PyInstaller build folders
 build/
 dist/
 .venv-build/

@@ -1,9 +1,8 @@
-"""Controle of de app op deze computer alles kan wat hij nodig heeft.
+"""Checks whether the app can do everything it needs on this computer.
 
-Bedoeld voor wie de app krijgt en iets niet werkt. Start met `--selftest` en je
-krijgt per onderdeel te zien of het in orde is. Het verslag wordt ook naast de
-gegevens weggeschreven, zodat het op Windows terug te vinden is als er geen
-terminalvenster is.
+Meant for whoever receives the app and finds something not working. Start it with
+`--selftest` and you get a verdict per item. The report is also written next to
+the data, so it can be found on Windows where there is no terminal window.
 """
 
 import platform
@@ -54,9 +53,9 @@ def _check_marktplaats():
         from core.monitor import MarktplaatsMonitor
 
         monitor = MarktplaatsMonitor()
-        # Zonder promotiefilter: deze controle gaat over de verbinding, niet
-        # over het filteren. Brede termen als "fiets" bestaan in de eerste
-        # honderd resultaten volledig uit betaalde promoties.
+        # Without the promotion filter: this check is about the connection, not
+        # about filtering. Broad terms such as "fiets" consist entirely of paid
+        # promotions across the first hundred results.
         items = monitor.fetch_listings("fiets", limit=3, hide_promoted=False)
         if items:
             return True, tr("st_results").format(aantal=len(items))
@@ -100,7 +99,7 @@ def _check_qt():
 
 
 def run():
-    # Zelfde taal als in de app is ingesteld.
+    # Same language as configured in the app.
     from PyQt6.QtCore import QSettings
 
     from core.appinfo import APP_NAME, ORG_NAME

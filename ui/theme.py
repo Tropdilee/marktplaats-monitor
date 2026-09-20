@@ -6,13 +6,13 @@ from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QGroupBox, QGridL
 
 
 def system_font_family():
-    """Het lettertype dat het systeem zelf voorschrijft.
+    """The font the system itself prescribes.
 
-    Gebruikt als standaard in plaats van een vaste naam: "Segoe UI" bestaat
-    alleen op Windows, en elders verving Qt dat stilletjes door iets anders.
-    Bewust niet via QApplication.font(), want die geeft het lettertype terug
-    dat de app zelf al heeft ingesteld - dan zou "standaard herstellen" de
-    huidige keuze teruggeven in plaats van de echte standaard.
+    Used as the default instead of a fixed name: "Segoe UI" exists only on
+    Windows, and elsewhere Qt quietly substituted something else. Deliberately
+    not through QApplication.font(), because that returns the font the app has
+    already set - "restore defaults" would then hand back the current choice
+    instead of the real default.
     """
     return QFontDatabase.systemFont(QFontDatabase.SystemFont.GeneralFont).family()
 
@@ -54,7 +54,7 @@ def build_stylesheet(t: ThemeConfig) -> str:
 
 
 class AppearanceDialog(QDialog):
-    """Eenvoudige editor om uiterlijk aan te passen: thema presets, accentkleur en lettergrootte."""
+    """Simple editor for the appearance: theme presets, accent colour and font size."""
 
     def __init__(self, parent, settings):
         super().__init__(parent)
@@ -80,7 +80,7 @@ class AppearanceDialog(QDialog):
     def build_ui(self):
         root = QVBoxLayout(self)
 
-        # Thema-presets
+        # Theme presets
         presets_box = QGroupBox(tr("theme_group"))
         presets_layout = QGridLayout(presets_box)
         presets_label = QLabel(tr("theme_pick"))
@@ -95,7 +95,7 @@ class AppearanceDialog(QDialog):
         presets_layout.addWidget(self.presets_combo, 0, 1)
         root.addWidget(presets_box)
 
-        # Kleuren
+        # Colours
         colors_box = QGroupBox(tr("colors_group"))
         colors_layout = QGridLayout(colors_box)
 
@@ -115,20 +115,20 @@ class AppearanceDialog(QDialog):
 
         root.addWidget(colors_box)
 
-        # Lettertype-grootte
+        # Font size
         font_box = QGroupBox(tr("font_group"))
         font_layout = QGridLayout(font_box)
 
         self.font_family_combo = QFontComboBox()
-        # "Sans Serif" is een alias; de combo maakt er de echte familie van
-        # (bijvoorbeeld "Noto Sans"). Die uitkomst bewaren we, zodat we bij het
-        # opslaan kunnen zien of de gebruiker nog op de systeemkeuze staat.
+        # "Sans Serif" is an alias; the combo resolves it to the real family
+        # (for example "Noto Sans"). We keep that outcome, so on saving we can
+        # tell whether the user is still on the system choice.
         self.font_family_combo.setCurrentFont(QFont(system_font_family()))
         self.system_family = self.font_family_combo.currentFont().family()
 
-        opgeslagen = self.settings.value("ui/font_family", "")
-        if opgeslagen:
-            self.font_family_combo.setCurrentFont(QFont(opgeslagen))
+        stored = self.settings.value("ui/font_family", "")
+        if stored:
+            self.font_family_combo.setCurrentFont(QFont(stored))
 
         self.font_size_spin = QSpinBox()
         self.font_size_spin.setRange(8, 16)
@@ -140,7 +140,7 @@ class AppearanceDialog(QDialog):
         font_layout.addWidget(self.font_size_spin, 1, 1)
         root.addWidget(font_box)
 
-        # Onderste knoppen
+        # Bottom buttons
         buttons_row = QHBoxLayout()
         self.reset_btn = QPushButton(tr("restore_defaults"))
         self.reset_btn.clicked.connect(self.reset_defaults)
@@ -156,7 +156,7 @@ class AppearanceDialog(QDialog):
 
         root.addLayout(buttons_row)
 
-    # Preset-logica
+    # Preset logic
     def apply_preset(self, index: int):
         if index == 0:  # MIAW Magenta
             self.current_theme = ThemeConfig()
@@ -188,7 +188,7 @@ class AppearanceDialog(QDialog):
             )
 
     def pick_color(self, field: str):
-        # Huidige kleur als startpunt
+        # Current colour as the starting point
         start_hex = getattr(self.current_theme, field)
         color = QColor(start_hex)
         chosen = QColorDialog.getColor(color, self, tr("pick_color_title"))
@@ -196,7 +196,7 @@ class AppearanceDialog(QDialog):
             hex_val = chosen.name()
             setattr(self.current_theme, field, hex_val)
             if field == "accent":
-                # Accent-hover iets donkerder / feller maken
+                # Make the accent hover a little darker / more vivid
                 darker = chosen.darker(115)
                 self.current_theme.accent_hover = darker.name()
 
@@ -207,7 +207,7 @@ class AppearanceDialog(QDialog):
         self.presets_combo.setCurrentIndex(0)
 
     def accept(self):
-        # Thema opslaan in settings
+        # Store the theme in settings
         self.settings.setValue("ui/accent", self.current_theme.accent)
         self.settings.setValue("ui/accent_hover", self.current_theme.accent_hover)
         self.settings.setValue("ui/bg", self.current_theme.bg)
@@ -219,11 +219,10 @@ class AppearanceDialog(QDialog):
         self.settings.setValue("ui/success", self.current_theme.success)
         self.settings.setValue("ui/warning", self.current_theme.warning)
         self.settings.setValue("ui/font_size", self.font_size_spin.value())
-        # Staat de keuze gelijk aan het systeemlettertype, dan slaan we niets
-        # op. De app volgt dan het systeem, ook op een andere computer met
-        # andere lettertypen.
-        familie = self.font_family_combo.currentFont().family()
+        # When the choice equals the system font we store nothing. The app then
+        # follows the system, including on another computer with different fonts.
+        family = self.font_family_combo.currentFont().family()
         self.settings.setValue(
-            "ui/font_family", "" if familie == self.system_family else familie
+            "ui/font_family", "" if family == self.system_family else family
         )
         super().accept()

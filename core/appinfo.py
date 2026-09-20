@@ -1,8 +1,8 @@
-"""Naam en versie van de app, op één plek.
+"""Application name and version, in one place.
 
-Stonden eerder alleen in ui/main_window.py, maar core/paths.py en de zelftest
-hebben ze ook nodig om de gegevensmap te bepalen. Twee kopieën die uit elkaar
-lopen levert twee verschillende mappen op.
+These used to live only in ui/main_window.py, but core/paths.py and the
+self-test need them as well to work out the data folder. Two copies drifting
+apart would produce two different folders.
 """
 
 APP_NAME = "MIAW Marktplaats Monitor"

@@ -1,6 +1,6 @@
 @echo off
-REM Bouwt de Windows-versie. Draai dit op Windows, niet op Linux:
-REM PyInstaller kan niet voor een ander systeem bouwen dan waarop het draait.
+REM Builds the Windows version. Run this on Windows, not on Linux:
+REM PyInstaller cannot build for a system other than the one it runs on.
 setlocal
 cd /d "%~dp0\.."
 
@@ -16,6 +16,6 @@ powershell -NoProfile -Command ^
   "Compress-Archive -Path 'dist\MIAW Marktplaats Monitor' -DestinationPath 'dist\MIAW-Marktplaats-Monitor-windows.zip' -Force"
 
 echo.
-echo Klaar: dist\MIAW-Marktplaats-Monitor-windows.zip
-echo Uitpakken en 'MIAW Marktplaats Monitor.exe' starten.
+echo Done: dist\MIAW-Marktplaats-Monitor-windows.zip
+echo Unpack and start 'MIAW Marktplaats Monitor.exe'.
 endlocal

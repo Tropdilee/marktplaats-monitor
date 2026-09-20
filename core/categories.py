@@ -1,8 +1,8 @@
-"""Categorieën van Marktplaats, met een cache op schijf.
+"""Marktplaats categories, with an on-disk cache.
 
-De hoofdcategorieën veranderen zelden, dus ze worden één keer opgehaald en
-daarna bewaard. Elke zoekopdracht levert de lijst opnieuw mee, dus in de praktijk
-ververst de cache zichzelf zonder extra verkeer richting Marktplaats.
+The top-level categories rarely change, so they are fetched once and then kept.
+Every search returns the list again, so in practice the cache refreshes itself
+without any extra traffic towards Marktplaats.
 """
 
 import json
@@ -44,7 +44,7 @@ class CategoryStore:
             pass
 
     def update_from_response(self, options):
-        """Neem de categorielijst over uit een zoekantwoord."""
+        """Adopt the category list from a search response."""
         if not isinstance(options, list):
             return False
 

@@ -1,22 +1,20 @@
-"""Opslag van de Telegram-token buiten het gewone instellingenbestand.
+"""Storing the Telegram token outside the ordinary settings file.
 
-QSettings schrijft alles leesbaar weg, op Linux in ~/.config. Daar hoort een
-bot-token niet: die komt mee in back-ups, is zichtbaar bij het delen van je
-scherm en belandt zo in een repository als het instellingenbestand ooit in de
-projectmap staat.
+QSettings writes everything in readable form, on Linux under ~/.config. A bot
+token does not belong there: it ends up in backups, is visible when sharing your
+screen, and would land in a repository if the settings file ever sat inside the
+project folder.
 
-Deze module zet de token in de sleutelbos van het besturingssysteem
-(Secret Service / GNOME Keyring of KWallet op Linux, Keychain op macOS,
-Credential Manager op Windows). Die is versleuteld op schijf en wordt
-ontgrendeld bij het inloggen.
+This module puts the token in the operating system's keyring (Secret Service /
+GNOME Keyring or KWallet on Linux, Keychain on macOS, Credential Manager on
+Windows). That store is encrypted on disk and unlocked when you log in.
 
-Wat het niet oplost: software die onder jouw eigen account draait mag de
-sleutelbos net zo goed uitlezen. Het beschermt tegen meelezen en per ongeluk
-delen, niet tegen malware die al als jou draait.
+What it does not solve: software running under your own account may read the
+keyring just as well. It protects against being read over your shoulder and
+against accidental sharing, not against malware already running as you.
 
-Is er geen sleutelbos beschikbaar, dan valt de opslag terug op QSettings. Dat
-wordt gemeld in plaats van stilzwijgend gedaan, zodat duidelijk is dat de token
-dan gewoon leesbaar op schijf staat.
+If no keyring is available, storage falls back to QSettings. That is reported
+rather than done silently, so it is clear the token then sits readable on disk.
 """
 
 SERVICE_NAME = "MIAW Marktplaats Monitor"
@@ -25,12 +23,12 @@ LEGACY_SETTINGS_KEY = "telegram/bot_token"
 
 try:
     import keyring
-except Exception:  # pragma: no cover - keyring hoeft niet geïnstalleerd te zijn
+except Exception:  # pragma: no cover - keyring need not be installed
     keyring = None
 
 
 class SecretStore:
-    """Leest en schrijft de Telegram-token, bij voorkeur via de sleutelbos."""
+    """Reads and writes the Telegram token, preferably through the keyring."""
 
     def __init__(self, settings, service=SERVICE_NAME):
         self.settings = settings
@@ -39,10 +37,10 @@ class SecretStore:
         self.available = self._probe()
 
     def _probe(self):
-        """Kijk of er echt een bruikbare sleutelbos is.
+        """Check whether a usable keyring is really present.
 
-        Zonder grafische sessie kiest keyring een backend die bij elk gebruik
-        een fout geeft, dus een enkele proeflezing is de betrouwbaarste test.
+        Without a graphical session, keyring picks a backend that raises on every
+        use, so a single trial read is the most reliable test.
         """
         if keyring is None:
             return False
@@ -68,8 +66,8 @@ class SecretStore:
             if token:
                 return token
 
-            # Oude installatie: token stond nog leesbaar in QSettings. Die
-            # verhuist bij de eerste keer lezen naar de sleutelbos.
+            # Older installation: the token was still readable in QSettings.
+            # It moves to the keyring on the first read.
             legacy = self.settings.value(LEGACY_SETTINGS_KEY, "")
             if legacy:
                 if self.set_token(legacy):
@@ -79,7 +77,7 @@ class SecretStore:
         return self.settings.value(LEGACY_SETTINGS_KEY, "") or ""
 
     def set_token(self, token):
-        """Bewaar de token. Geeft True terug als dat via de sleutelbos ging."""
+        """Store the token. Returns True when it went through the keyring."""
         token = (token or "").strip()
 
         if self.available:
@@ -88,7 +86,7 @@ class SecretStore:
                     keyring.set_password(self.service, TOKEN_ENTRY, token)
                 else:
                     self._delete()
-                # Nooit een kopie laten staan in het leesbare bestand.
+                # Never leave a copy behind in the readable file.
                 self.settings.remove(LEGACY_SETTINGS_KEY)
                 return True
             except Exception:
@@ -101,5 +99,5 @@ class SecretStore:
         try:
             keyring.delete_password(self.service, TOKEN_ENTRY)
         except Exception:
-            # Niets te wissen is prima.
+            # Nothing to delete is fine.
             pass

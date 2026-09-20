@@ -1,19 +1,21 @@
-"""Berichten versturen via een Telegram-bot.
+"""Sending messages through a Telegram bot.
 
-De foutmeldingen van Telegram zijn kort en niet altijd duidelijk. Vooral het
-verschil tussen 404 en 401 is verwarrend: 404 betekent dat de token niet eens de
-vorm van een token heeft (leeg, half geplakt of met een spatie erin), terwijl
-401 betekent dat de vorm klopt maar de bot niet bestaat of is ingetrokken.
-`describe_error` vertaalt dat naar iets waar je wat aan hebt.
+Telegram's error messages are terse and not always clear. The difference between
+404 and 401 is especially confusing: 404 means the token is not even shaped like
+a token (empty, half-pasted, or containing a space), while 401 means the shape is
+right but the bot does not exist or has been revoked. `describe_error` turns that
+into something actionable.
 """
 
 import re
 
 import requests
 
+from core.translations import tr
+
 API_URL = "https://api.telegram.org/bot{token}/{method}"
 
-# Zoals BotFather hem geeft: cijfers, dubbele punt, dan letters/cijfers/_/-
+# As BotFather hands it out: digits, colon, then letters/digits/_/-
 TOKEN_PATTERN = re.compile(r"^\d{5,}:[A-Za-z0-9_-]{30,}$")
 
 
@@ -32,7 +34,7 @@ def _call(token, method, data=None, timeout=20):
 
 
 def get_bot_info(token, timeout=20):
-    """Controleer alleen de token, zonder een bericht te sturen."""
+    """Check the token only, without sending a message."""
     return _call(token, "getMe", timeout=timeout)
 
 
@@ -41,58 +43,44 @@ def send_telegram_message(token, chat_id, text, timeout=20):
 
 
 def describe_error(payload):
-    """Zet een Telegram-antwoord om in een bruikbare uitleg."""
+    """Turn a Telegram response into a usable explanation."""
     code = (payload or {}).get("error_code")
-    omschrijving = str((payload or {}).get("description", "")).lower()
+    description = str((payload or {}).get("description", "")).lower()
 
     if code == 404:
-        return (
-            "De bot token wordt niet herkend als token. Hij hoort eruit te zien "
-            "als 123456789:AAE... — controleer of de hele regel uit BotFather is "
-            "overgenomen, in één stuk en zonder spaties."
-        )
+        return tr("tg_err_404")
     if code == 401:
-        return (
-            "De bot token heeft de juiste vorm maar wordt afgewezen. Waarschijnlijk "
-            "is hij ingetrokken of vervangen. Vraag met /token bij BotFather een "
-            "nieuwe op."
-        )
-    if "chat not found" in omschrijving:
-        return (
-            "Het chat ID klopt niet. Stuur je bot eerst een bericht en haal het "
-            "juiste ID op via de knop 'Chat ID ophalen'."
-        )
-    if code == 403 or "blocked" in omschrijving:
-        return (
-            "De bot mag jou geen berichten sturen. Open de chat met je bot en "
-            "stuur /start."
-        )
-    if code == 400 and "chat_id" in omschrijving:
-        return "Het chat ID ontbreekt of heeft een verkeerde vorm."
+        return tr("tg_err_401")
+    if "chat not found" in description:
+        return tr("tg_err_chat")
+    if code == 403 or "blocked" in description:
+        return tr("tg_err_blocked")
+    if code == 400 and "chat_id" in description:
+        return tr("tg_err_chatid")
 
     return str((payload or {}).get("description") or payload)
 
 
 def find_chat_ids(token, timeout=20):
-    """Haal chat-ID's op uit de recente berichten aan de bot.
+    """Collect chat IDs from the bot's recent messages.
 
-    Werkt alleen als je de bot kort daarvoor zelf een bericht hebt gestuurd;
-    Telegram bewaart die updates maar een beperkte tijd.
+    Only works if you sent the bot a message shortly beforehand; Telegram keeps
+    those updates for a limited time only.
     """
     ok, payload = _call(token, "getUpdates", timeout=timeout)
     if not ok:
         return False, payload, []
 
-    gevonden = []
+    found = []
     for update in payload.get("result", []):
-        for sleutel in ("message", "edited_message", "channel_post", "my_chat_member"):
-            chat = (update.get(sleutel) or {}).get("chat")
+        for key in ("message", "edited_message", "channel_post", "my_chat_member"):
+            chat = (update.get(key) or {}).get("chat")
             if not chat:
                 continue
-            naam = chat.get("title") or " ".join(
+            name = chat.get("title") or " ".join(
                 filter(None, [chat.get("first_name"), chat.get("last_name")])
             ) or chat.get("username") or str(chat.get("id"))
-            paar = (str(chat.get("id")), naam)
-            if paar not in gevonden:
-                gevonden.append(paar)
-    return True, payload, gevonden
+            pair = (str(chat.get("id")), name)
+            if pair not in found:
+                found.append(pair)
+    return True, payload, found

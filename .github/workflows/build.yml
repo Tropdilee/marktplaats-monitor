@@ -1,9 +1,9 @@
-# Bouwt de app voor Linux, Windows en macOS.
+# Builds the app for Linux, Windows and macOS.
 #
-# PyInstaller kan alleen bouwen voor het systeem waarop het draait, dus hier
-# draait dezelfde bouwstap op drie machines tegelijk. Het resultaat hangt bij de
-# uitvoering als download, en bij een tag ook onder Releases.
-name: Bouw de app
+# PyInstaller can only build for the system it runs on, so the same build step
+# runs on three machines at once here. The result is attached to the run as a
+# download, and on a tag it also appears under Releases.
+name: Build the app
 
 on:
   push:
@@ -11,17 +11,17 @@ on:
   workflow_dispatch:
 
 jobs:
-  bouwen:
+  build:
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
-            naam: linux
+            label: linux
           - os: windows-latest
-            naam: windows
+            label: windows
           - os: macos-latest
-            naam: macos
+            label: macos
 
     runs-on: ${{ matrix.os }}
 
@@ -32,71 +32,71 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Systeembibliotheken voor Qt (alleen Linux)
-        if: matrix.naam == 'linux'
+      - name: System libraries for Qt (Linux only)
+        if: matrix.label == 'linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libxcb-cursor0 libegl1 libgl1
 
-      - name: Pakketten installeren
+      - name: Install packages
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt pyinstaller
 
-      - name: Bouwen
+      - name: Build
         run: python -m PyInstaller packaging/miaw.spec --noconfirm
 
-      - name: Zelftest draaien
-        # Controleert in de gebouwde app of Qt, de gegevensmap, de sleutelbos en
-        # de verbinding met Marktplaats werken. Zonder grafische sessie draait Qt
-        # hier zonder venster.
+      - name: Run the self-test
+        # Checks inside the built app that Qt, the data folder, the keyring and
+        # the connection to Marktplaats work. Without a graphical session Qt runs
+        # here without a window.
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
           python - <<'PY'
           import subprocess, sys, glob, os
-          kandidaten = glob.glob("dist/**/MIAW Marktplaats Monitor", recursive=True)
-          kandidaten += glob.glob("dist/**/MIAW Marktplaats Monitor.exe", recursive=True)
-          uitvoerbaar = [k for k in kandidaten if os.path.isfile(k)]
-          if not uitvoerbaar:
-              sys.exit("geen gebouwde app gevonden")
-          r = subprocess.run([uitvoerbaar[0], "--selftest"], capture_output=True, text=True)
+          candidates = glob.glob("dist/**/MIAW Marktplaats Monitor", recursive=True)
+          candidates += glob.glob("dist/**/MIAW Marktplaats Monitor.exe", recursive=True)
+          executables = [c for c in candidates if os.path.isfile(c)]
+          if not executables:
+              sys.exit("no built app found")
+          r = subprocess.run([executables[0], "--selftest"], capture_output=True, text=True)
           print(r.stdout or r.stderr)
-          # De Telegram- en sleutelboscontrole kunnen op een bouwmachine niet
-          # slagen; alleen een crash is hier een probleem.
-          if "zelftest" not in (r.stdout or ""):
-              sys.exit("de app startte niet")
+          # The Telegram and keyring checks cannot pass on a build machine; only
+          # a crash is a problem here.
+          if "self-test" not in (r.stdout or "") and "zelftest" not in (r.stdout or ""):
+              sys.exit("the app did not start")
           PY
 
-      - name: Inpakken (Linux/macOS)
-        if: matrix.naam != 'windows'
+      - name: Package (Linux/macOS)
+        if: matrix.label != 'windows'
         run: |
           cd dist
           if [ -d "MIAW Marktplaats Monitor.app" ]; then
             hdiutil create -volname "MIAW Marktplaats Monitor" \
               -srcfolder "MIAW Marktplaats Monitor.app" \
-              -ov -format UDZO "MIAW-Marktplaats-Monitor-${{ matrix.naam }}.dmg"
+              -ov -format UDZO "MIAW-Marktplaats-Monitor-${{ matrix.label }}.dmg"
           else
-            tar czf "MIAW-Marktplaats-Monitor-${{ matrix.naam }}.tar.gz" "MIAW Marktplaats Monitor"
+            tar czf "MIAW-Marktplaats-Monitor-${{ matrix.label }}.tar.gz" "MIAW Marktplaats Monitor"
           fi
 
-      - name: Inpakken (Windows)
-        if: matrix.naam == 'windows'
+      - name: Package (Windows)
+        if: matrix.label == 'windows'
         run: |
           Compress-Archive -Path "dist\MIAW Marktplaats Monitor" `
             -DestinationPath "dist\MIAW-Marktplaats-Monitor-windows.zip" -Force
 
       - uses: actions/upload-artifact@v4
         with:
-          name: MIAW-Marktplaats-Monitor-${{ matrix.naam }}
+          name: MIAW-Marktplaats-Monitor-${{ matrix.label }}
           path: |
             dist/*.tar.gz
             dist/*.zip
             dist/*.dmg
           if-no-files-found: error
 
-  uitbrengen:
-    needs: bouwen
+  release:
+    needs: build
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:

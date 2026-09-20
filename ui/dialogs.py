@@ -74,7 +74,7 @@ class SearchProfileDialog(QDialog):
 
 
 class AppearanceDialog(ThemeAppearanceDialog):
-    """Dunne wrapper rond de ThemeAppearanceDialog zodat bestaande imports blijven werken."""
+    """Thin wrapper around ThemeAppearanceDialog so existing imports keep working."""
 
     def __init__(self, parent, settings):
         super().__init__(parent, settings)

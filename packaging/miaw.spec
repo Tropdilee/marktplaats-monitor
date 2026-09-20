@@ -1,11 +1,11 @@
-# PyInstaller-recept voor de MIAW Marktplaats Monitor.
+# PyInstaller recipe for the MIAW Marktplaats Monitor.
 #
-# Bouwen kan alleen op het systeem waarvoor je bouwt: een Windows-exe maak je op
-# Windows, een macOS-app op macOS. PyInstaller kan niet kruislings bouwen.
+# You can only build on the system you are building for: a Windows exe is made
+# on Windows, a macOS app on macOS. PyInstaller cannot cross-compile.
 #
 #   pyinstaller packaging/miaw.spec --noconfirm
 #
-# Zie packaging/README.md voor de bouwstappen per systeem.
+# See packaging/README.en.md for the build steps per system.
 
 import sys
 from pathlib import Path
@@ -16,9 +16,9 @@ PROJECT_DIR = Path(SPECPATH).resolve().parent
 IS_WINDOWS = sys.platform.startswith("win")
 IS_MACOS = sys.platform == "darwin"
 
-# keyring zoekt zijn backends pas tijdens het draaien op. PyInstaller ziet die
-# imports dus niet staan en laat ze zonder deze regel weg; de app valt dan terug
-# op het leesbaar opslaan van de token.
+# keyring resolves its backends only at runtime. PyInstaller therefore does not
+# see those imports and would leave them out without this line; the app would
+# then fall back to storing the token in readable form.
 hidden = collect_submodules("keyring.backends")
 hidden += ["keyring.backends.null"]
 if IS_WINDOWS:
@@ -36,7 +36,7 @@ a = Analysis(
     hiddenimports=hidden,
     hookspath=[],
     runtime_hooks=[],
-    # Qt-onderdelen die deze app niet gebruikt. Scheelt ruim honderd MB.
+    # Qt components this app does not use. Saves well over a hundred MB.
     excludes=[
         "PyQt6.QtQml",
         "PyQt6.QtQuick",
@@ -70,7 +70,7 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
-    # Geen zwart terminalvenster naast de app op Windows.
+    # No black terminal window next to the app on Windows.
     console=False,
     disable_windowed_traceback=False,
     target_arch=None,
@@ -96,7 +96,7 @@ if IS_MACOS:
         info_plist={
             "CFBundleShortVersionString": "4.0",
             "NSHighResolutionCapable": True,
-            # Zonder dit weigert macOS de netwerkverbinding in een app-bundel.
+            # Without this macOS refuses network access inside an app bundle.
             "LSMinimumSystemVersion": "11.0",
         },
     )
