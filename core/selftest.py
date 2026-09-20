@@ -10,6 +10,8 @@ import platform
 import sys
 from datetime import datetime
 
+from core.translations import set_language, tr
+
 
 def _regel(naam, ok, toelichting=""):
     merk = "OK  " if ok else "FOUT"
@@ -24,26 +26,27 @@ def _check_gegevensmap():
     try:
         proef.write_text("x", encoding="utf-8")
         proef.unlink()
-        return True, f"{pad} (gebundeld: {'ja' if is_frozen() else 'nee'})"
+        merk = tr("st_bundled_yes") if is_frozen() else tr("st_bundled_no")
+        return True, f"{pad} ({merk})"
     except OSError as exc:
-        return False, f"{pad} niet beschrijfbaar: {exc}"
+        return False, f'{pad} {tr("st_not_writable")}: {exc}'
 
 
 def _check_sleutelbos():
     try:
         import keyring
     except Exception as exc:
-        return False, f"keyring ontbreekt in deze build: {exc}"
+        return False, f'{tr("st_no_keyring_pkg")}: {exc}'
 
     try:
         backend = keyring.get_keyring()
         naam = type(backend).__name__
         keyring.get_password("MIAW Marktplaats Monitor", "selftest")
         if "fail" in type(backend).__module__.lower():
-            return False, f"geen bruikbare sleutelbos ({naam}); token komt leesbaar op schijf"
+            return False, tr("st_no_keyring").format(naam=naam)
         return True, naam
     except Exception as exc:
-        return False, f"sleutelbos niet bruikbaar: {type(exc).__name__}; token komt leesbaar op schijf"
+        return False, tr("st_keyring_error").format(fout=type(exc).__name__)
 
 
 def _check_marktplaats():
@@ -56,8 +59,8 @@ def _check_marktplaats():
         # honderd resultaten volledig uit betaalde promoties.
         items = monitor.fetch_listings("fiets", limit=3, hide_promoted=False)
         if items:
-            return True, f"{len(items)} resultaten opgehaald"
-        return False, "verbinding gelukt maar geen resultaten"
+            return True, tr("st_results").format(aantal=len(items))
+        return False, tr("st_no_results")
     except Exception as exc:
         return False, f"{type(exc).__name__}: {exc}"
 
@@ -72,9 +75,9 @@ def _check_telegram():
     instellingen = QSettings(ORG_NAME, APP_NAME)
     token = SecretStore(instellingen).get_token()
     if not token:
-        return None, "geen token ingesteld (overslaan)"
+        return None, tr("st_no_token")
     if not looks_like_token(token):
-        return False, "token heeft niet de vorm die BotFather geeft"
+        return False, tr("st_token_shape")
 
     ok, payload = get_bot_info(token)
     if ok:
@@ -97,8 +100,15 @@ def _check_qt():
 
 
 def run():
+    # Zelfde taal als in de app is ingesteld.
+    from PyQt6.QtCore import QSettings
+
+    from core.appinfo import APP_NAME, ORG_NAME
+
+    set_language(QSettings(ORG_NAME, APP_NAME).value("ui/language", "Nederlands"))
+
     regels = [
-        "MIAW Marktplaats Monitor - zelftest",
+        f"{APP_NAME} - {tr('st_title')}",
         datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         f"  {platform.platform()}",
         f"  Python {sys.version.split()[0]}",
@@ -106,11 +116,11 @@ def run():
     ]
 
     controles = [
-        ("Qt en vensterbeheer", _check_qt),
-        ("Gegevensmap", _check_gegevensmap),
-        ("Sleutelbos voor de token", _check_sleutelbos),
-        ("Verbinding met Marktplaats", _check_marktplaats),
-        ("Telegram-bot", _check_telegram),
+        (tr("st_qt"), _check_qt),
+        (tr("st_datadir"), _check_gegevensmap),
+        (tr("st_keyring"), _check_sleutelbos),
+        (tr("st_connection"), _check_marktplaats),
+        (tr("st_telegram"), _check_telegram),
     ]
 
     mislukt = 0
@@ -118,7 +128,7 @@ def run():
         try:
             ok, toelichting = functie()
         except Exception as exc:
-            ok, toelichting = False, f"onverwachte fout: {type(exc).__name__}: {exc}"
+            ok, toelichting = False, f'{tr("st_unexpected")}: {type(exc).__name__}: {exc}'
         if ok is None:
             regels.append(f"  [ -  ] {naam} - {toelichting}")
             continue
@@ -127,7 +137,9 @@ def run():
         regels.append(_regel(naam, ok, toelichting))
 
     regels.append("")
-    regels.append("Alles in orde." if not mislukt else f"{mislukt} onderdeel(en) niet in orde.")
+    regels.append(
+        tr("st_all_ok") if not mislukt else tr("st_failed").format(aantal=mislukt)
+    )
     verslag = "\n".join(regels)
     print(verslag)
 
@@ -136,7 +148,7 @@ def run():
 
         bestand = data_file("selftest.txt")
         bestand.write_text(verslag + "\n", encoding="utf-8")
-        print(f"\nVerslag ook opgeslagen als:\n  {bestand}")
+        print(f'\n{tr("st_saved_as")}\n  {bestand}')
     except Exception:
         pass
 

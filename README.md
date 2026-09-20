@@ -1,8 +1,13 @@
 # MIAW Marktplaats Monitor v4.0
 
+*Nederlands · [English](README.en.md)*
+
 Desktopapp (PyQt6) die Marktplaats in de gaten houdt en een Telegram-bericht
 stuurt zodra er een nieuwe advertentie verschijnt die aan je zoekopdracht
 voldoet.
+
+Het venster is in het Nederlands en het Engels te gebruiken; wisselen kan via
+**Taal / Language** in de menubalk of op het tabblad Weergave.
 
 ## Starten
 
@@ -149,7 +154,7 @@ een refresh of een herstart niets opnieuw ophaalt. Uit te zetten via
 
 ## Doorgeven aan iemand anders
 
-Zie `packaging/README.md`. Daar staat hoe je een bundel maakt voor Linux,
+Zie `packaging/README.md` (of `packaging/README.en.md`). Daar staat hoe je een bundel maakt voor Linux,
 Windows en macOS waarin Python en Qt al zitten, zodat de ontvanger niets hoeft
 te installeren. Bouwen kan alleen op het doelsysteem zelf; de meegeleverde
 GitHub Actions-workflow doet alle drie tegelijk.

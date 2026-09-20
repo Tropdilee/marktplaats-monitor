@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 from PyQt6.QtGui import QColor, QFont, QFontDatabase
+
+from core.translations import tr
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QGroupBox, QGridLayout, QLabel, QPushButton, QComboBox, QFontComboBox, QSpinBox, QColorDialog
 
 
@@ -57,7 +59,7 @@ class AppearanceDialog(QDialog):
     def __init__(self, parent, settings):
         super().__init__(parent)
         self.settings = settings
-        self.setWindowTitle("Uiterlijk aanpassen")
+        self.setWindowTitle(tr("appearance_title"))
         self.resize(520, 360)
 
         self.current_theme = ThemeConfig(
@@ -79,14 +81,14 @@ class AppearanceDialog(QDialog):
         root = QVBoxLayout(self)
 
         # Thema-presets
-        presets_box = QGroupBox("Thema")
+        presets_box = QGroupBox(tr("theme_group"))
         presets_layout = QGridLayout(presets_box)
-        presets_label = QLabel("Kies een basisthema")
+        presets_label = QLabel(tr("theme_pick"))
         self.presets_combo = QComboBox()
         self.presets_combo.addItems([
-            "MIAW Magenta (standaard)",
-            "Midnight Blue",
-            "Light Mode",
+            tr("theme_default"),
+            tr("theme_midnight"),
+            tr("theme_light"),
         ])
         self.presets_combo.currentIndexChanged.connect(self.apply_preset)
         presets_layout.addWidget(presets_label, 0, 0)
@@ -94,27 +96,27 @@ class AppearanceDialog(QDialog):
         root.addWidget(presets_box)
 
         # Kleuren
-        colors_box = QGroupBox("Kleuren")
+        colors_box = QGroupBox(tr("colors_group"))
         colors_layout = QGridLayout(colors_box)
 
-        self.accent_btn = QPushButton("Accentkleur…")
+        self.accent_btn = QPushButton(tr("color_accent_btn"))
         self.accent_btn.clicked.connect(lambda: self.pick_color("accent"))
-        self.bg_btn = QPushButton("Achtergrond…")
+        self.bg_btn = QPushButton(tr("color_bg_btn"))
         self.bg_btn.clicked.connect(lambda: self.pick_color("bg"))
-        self.panel_btn = QPushButton("Panel…")
+        self.panel_btn = QPushButton(tr("color_panel_btn"))
         self.panel_btn.clicked.connect(lambda: self.pick_color("panel"))
 
-        colors_layout.addWidget(QLabel("Belangrijkste kleur (knoppen, tabs)"), 0, 0)
+        colors_layout.addWidget(QLabel(tr("color_accent_label")), 0, 0)
         colors_layout.addWidget(self.accent_btn, 0, 1)
-        colors_layout.addWidget(QLabel("Hoofdachtergrond"), 1, 0)
+        colors_layout.addWidget(QLabel(tr("color_bg_label")), 1, 0)
         colors_layout.addWidget(self.bg_btn, 1, 1)
-        colors_layout.addWidget(QLabel("Panels (groepvakken, tab-achtergrond)"), 2, 0)
+        colors_layout.addWidget(QLabel(tr("color_panel_label")), 2, 0)
         colors_layout.addWidget(self.panel_btn, 2, 1)
 
         root.addWidget(colors_box)
 
         # Lettertype-grootte
-        font_box = QGroupBox("Lettertype")
+        font_box = QGroupBox(tr("font_group"))
         font_layout = QGridLayout(font_box)
 
         self.font_family_combo = QFontComboBox()
@@ -132,19 +134,19 @@ class AppearanceDialog(QDialog):
         self.font_size_spin.setRange(8, 16)
         self.font_size_spin.setValue(int(self.settings.value("ui/font_size", 10)))
 
-        font_layout.addWidget(QLabel("Lettertype"), 0, 0)
+        font_layout.addWidget(QLabel(tr("font_family_label")), 0, 0)
         font_layout.addWidget(self.font_family_combo, 0, 1)
-        font_layout.addWidget(QLabel("Basis lettergrootte"), 1, 0)
+        font_layout.addWidget(QLabel(tr("font_size_label")), 1, 0)
         font_layout.addWidget(self.font_size_spin, 1, 1)
         root.addWidget(font_box)
 
         # Onderste knoppen
         buttons_row = QHBoxLayout()
-        self.reset_btn = QPushButton("Standaard herstellen")
+        self.reset_btn = QPushButton(tr("restore_defaults"))
         self.reset_btn.clicked.connect(self.reset_defaults)
-        self.cancel_btn = QPushButton("Annuleren")
+        self.cancel_btn = QPushButton(tr("cancel"))
         self.cancel_btn.clicked.connect(self.reject)
-        self.ok_btn = QPushButton("Opslaan en toepassen")
+        self.ok_btn = QPushButton(tr("save_apply"))
         self.ok_btn.clicked.connect(self.accept)
 
         buttons_row.addStretch(1)
@@ -189,7 +191,7 @@ class AppearanceDialog(QDialog):
         # Huidige kleur als startpunt
         start_hex = getattr(self.current_theme, field)
         color = QColor(start_hex)
-        chosen = QColorDialog.getColor(color, self, "Kies kleur")
+        chosen = QColorDialog.getColor(color, self, tr("pick_color_title"))
         if chosen.isValid():
             hex_val = chosen.name()
             setattr(self.current_theme, field, hex_val)

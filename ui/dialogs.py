@@ -10,13 +10,14 @@ from PyQt6.QtWidgets import (
 )
 
 from core.categories import ALL_CATEGORIES, CategoryStore
+from core.translations import tr
 from ui.theme import AppearanceDialog as ThemeAppearanceDialog
 
 
 class SearchProfileDialog(QDialog):
     def __init__(self, parent, profile=None):
         super().__init__(parent)
-        self.setWindowTitle("Zoekprofiel bewerken")
+        self.setWindowTitle(tr("profile_dialog_title"))
         self.resize(430, 390)
         p = profile or {}
 
@@ -44,12 +45,12 @@ class SearchProfileDialog(QDialog):
         self.interval.setSuffix(" sec")
         self.interval.setValue(int(p.get("interval", 60)))
 
-        form.addRow("Profielnaam", self.name)
-        form.addRow("Zoekterm", self.term)
-        form.addRow("Categorie", self.category)
-        form.addRow("Regio", self.region)
-        form.addRow("Max. prijs", self.max_price)
-        form.addRow("Interval", self.interval)
+        form.addRow(tr("profile_name"), self.name)
+        form.addRow(tr("search_term"), self.term)
+        form.addRow(tr("category"), self.category)
+        form.addRow(tr("region"), self.region)
+        form.addRow(tr("max_price"), self.max_price)
+        form.addRow(tr("interval"), self.interval)
 
         layout.addLayout(form)
 

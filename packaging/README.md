@@ -1,5 +1,7 @@
 # De app inpakken om door te geven
 
+*Nederlands · [English](README.en.md)*
+
 De ontvanger hoeft geen Python te installeren: de bundel bevat Python, PyQt6 en
 alle pakketten. Uitpakken en starten is genoeg.
 

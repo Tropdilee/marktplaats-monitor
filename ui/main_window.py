@@ -53,7 +53,7 @@ from core.telegram_client import (
     looks_like_token,
     send_telegram_message,
 )
-from core.translations import get_text
+from core.translations import get_text, set_language, tr
 from ui.dialogs import SearchProfileDialog, AppearanceDialog
 from ui.theme import ThemeConfig, build_stylesheet, system_font_family
 
@@ -206,12 +206,12 @@ class TelegramSender(QThread):
             try:
                 ok, data = send_telegram_message(token, chat_id, text)
             except Exception as exc:
-                self.logged.emit(f"Telegram fout: {type(exc).__name__}: {exc}")
+                self.logged.emit(tr("log_telegram_error").format(fout=f"{type(exc).__name__}: {exc}"))
             else:
                 if ok:
-                    self.logged.emit("Telegram melding verstuurd.")
+                    self.logged.emit(tr("log_telegram_sent"))
                 else:
-                    self.logged.emit(f"Telegram fout: {data}")
+                    self.logged.emit(tr("log_telegram_error").format(fout=data))
 
             if self._stop_event.wait(self.SECONDS_BETWEEN_MESSAGES):
                 break
@@ -249,6 +249,7 @@ class MainWindow(QMainWindow):
         self.notifications = []
         self.current_profile_name = None
         self.current_language = self.settings.value("ui/language", "Nederlands")
+        set_language(self.current_language)
         self.saved_manager = SavedListsManager(
             data_file("saved_lists")
         )
@@ -292,10 +293,7 @@ class MainWindow(QMainWindow):
         self.update_status(False)
 
         if not self.secret_store.available:
-            self.log(
-                "Geen sleutelbos beschikbaar; de Telegram-token wordt leesbaar "
-                "opgeslagen in het instellingenbestand."
-            )
+            self.log(self.t("log_no_keyring"))
 
     def t(self, key):
         return get_text(self.current_language, key)
@@ -609,9 +607,9 @@ class MainWindow(QMainWindow):
 
         self.telegram_enabled = QCheckBox()
         self.telegram_enabled.toggled.connect(self.set_telegram_enabled)
-        self.bot_token_label = QLabel("Bot token")
-        self.chat_id_label = QLabel("Chat ID")
-        self.prefix_label = QLabel("Prefix")
+        self.bot_token_label = QLabel()
+        self.chat_id_label = QLabel()
+        self.prefix_label = QLabel()
         self.bot_token = MaskedTokenEdit()
         self.chat_id = QLineEdit()
         self.message_prefix = QLineEdit()
@@ -627,9 +625,9 @@ class MainWindow(QMainWindow):
         layout.addWidget(box)
 
         row = QHBoxLayout()
-        self.telegram_save_btn = QPushButton("Telegram opslaan")
-        self.telegram_test_btn = QPushButton("Telegram test")
-        self.telegram_chatid_btn = QPushButton("Chat ID ophalen")
+        self.telegram_save_btn = QPushButton()
+        self.telegram_test_btn = QPushButton()
+        self.telegram_chatid_btn = QPushButton()
         self.telegram_save_btn.clicked.connect(self.save_telegram_settings)
         self.telegram_test_btn.clicked.connect(self.test_telegram)
         self.telegram_chatid_btn.clicked.connect(self.fetch_chat_id)
@@ -923,6 +921,12 @@ class MainWindow(QMainWindow):
         self.show_images.setText(self.t("show_images"))
 
         self.telegram_enabled.setText(self.t("telegram_toggle"))
+        self.bot_token_label.setText(self.t("bot_token"))
+        self.chat_id_label.setText(self.t("chat_id"))
+        self.prefix_label.setText(self.t("prefix"))
+        self.telegram_save_btn.setText(self.t("telegram_save_btn"))
+        self.telegram_test_btn.setText(self.t("telegram_test_btn"))
+        self.telegram_chatid_btn.setText(self.t("telegram_chatid_btn"))
         self.clear_btn.setText(self.t("clear_notifications"))
         self.open_link_btn.setText(self.t("open_link"))
         self.preview_open_btn.setText(self.t("open_external"))
@@ -1025,7 +1029,7 @@ class MainWindow(QMainWindow):
         self.bot_token.setValue(self.secret_store.get_token())
         self.chat_id.setText(self.settings.value("telegram/chat_id", ""))
         self.message_prefix.setText(
-            self.settings.value("telegram/prefix", "Nieuwe Marktplaats advertentie")
+            self.settings.value("telegram/prefix", self.t("default_prefix"))
         )
         self.apply_view_options()
         self.update_region_warning()
@@ -1078,7 +1082,7 @@ class MainWindow(QMainWindow):
         self.secret_store.set_token(self.bot_token.value())
         self.settings.setValue("telegram/chat_id", self.chat_id.text().strip())
         self.settings.setValue("telegram/prefix", self.message_prefix.text().strip())
-        self.log(f"Telegram instellingen opgeslagen. Token in: {self.secret_store.describe()}.")
+        self.log(self.t("log_telegram_saved").format(opslag=self.secret_store.describe()))
 
     def set_telegram_enabled(self, aan):
         """Houd de twee vinkjes gelijk.
@@ -1109,11 +1113,9 @@ class MainWindow(QMainWindow):
             return
 
         if not looks_like_token(token):
-            uitleg = (
-                "Deze token heeft niet de vorm die BotFather geeft "
-                "(cijfers, dubbele punt, dan een lange reeks letters).\n\n"
-                f"Ingevuld: {len(token)} tekens"
-                f"{', met een spatie erin' if ' ' in token else ''}."
+            uitleg = self.t("token_wrong_shape").format(
+                aantal=len(token),
+                extra=self.t("token_with_space") if " " in token else "",
             )
             self.log(f"Telegram test: {uitleg.splitlines()[0]}")
             QMessageBox.warning(self, "Telegram", uitleg)
@@ -1129,18 +1131,22 @@ class MainWindow(QMainWindow):
         botnaam = (data.get("result") or {}).get("username", "?")
 
         ok, data = send_telegram_message(
-            token, chat_id, f"Testbericht vanuit {APP_NAME} v{APP_VERSION}"
+            token, chat_id, f"{self.t('test_message')} {APP_NAME} v{APP_VERSION}"
         )
         if ok:
             self.log(f"Telegram test geslaagd via @{botnaam}.")
             QMessageBox.information(
-                self, "Telegram", f"{self.t('telegram_test_ok')}\n\nBot: @{botnaam}"
+                self,
+                "Telegram",
+                f"{self.t('telegram_test_ok')}\n\n{self.t('telegram_bot_label')}: @{botnaam}",
             )
         else:
             uitleg = describe_error(data)
             self.log(f"Telegram test mislukt: {uitleg}")
             QMessageBox.warning(
-                self, "Telegram", f"De token werkt (@{botnaam}), maar:\n\n{uitleg}"
+                self,
+                "Telegram",
+                self.t("token_works_but").format(bot=botnaam, fout=uitleg),
             )
 
     def fetch_chat_id(self):
@@ -1150,7 +1156,7 @@ class MainWindow(QMainWindow):
 
         if not looks_like_token(token):
             QMessageBox.warning(
-                self, "Telegram", "Vul eerst een geldige bot token in."
+                self, "Telegram", self.t("enter_valid_token")
             )
             return
 
@@ -1163,9 +1169,7 @@ class MainWindow(QMainWindow):
             QMessageBox.information(
                 self,
                 "Telegram",
-                "Geen recente berichten gevonden.\n\nStuur je bot eerst een "
-                "bericht in Telegram (bijvoorbeeld /start) en probeer het "
-                "daarna opnieuw.",
+                self.t("no_recent_messages"),
             )
             return
 
@@ -1174,14 +1178,16 @@ class MainWindow(QMainWindow):
             self.chat_id.setText(chat_id)
             self.save_telegram_settings()
             QMessageBox.information(
-                self, "Telegram", f"Chat ID ingevuld: {chat_id} ({naam})"
+                self,
+                "Telegram",
+                self.t("chat_id_filled").format(id=chat_id, naam=naam),
             )
             return
 
         keuze, akkoord = QInputDialog.getItem(
             self,
             "Telegram",
-            "Meerdere chats gevonden:",
+            self.t("multiple_chats"),
             [f"{naam} — {chat_id}" for chat_id, naam in chats],
             0,
             False,
@@ -1206,6 +1212,8 @@ class MainWindow(QMainWindow):
 
     def set_language(self, lang):
         self.current_language = lang
+        # Ook de losse vensters en de verzend-thread halen hun tekst hier op.
+        set_language(lang)
         self.settings.setValue("ui/language", lang)
         for action in self.language_group:
             action.setChecked(action.text() == lang)
@@ -1284,20 +1292,25 @@ class MainWindow(QMainWindow):
             self.timer.start(self.next_interval_ms())
             self.update_status(True)
 
-            details = f"Interval {self.interval.value()}s (±{int(self.INTERVAL_JITTER * 100)}%)"
+            details = self.t("detail_interval").format(
+                seconden=self.interval.value(),
+                spreiding=int(self.INTERVAL_JITTER * 100),
+            )
             if self.adaptive_enabled.isChecked():
-                details += f", adaptief tot {self.max_interval.value()} min"
-            if self.quiet_enabled.isChecked():
-                details += (
-                    f", nachtpauze {self.quiet_from.time().toString('HH:mm')}"
-                    f"-{self.quiet_to.time().toString('HH:mm')}"
+                details += self.t("detail_adaptive").format(
+                    minuten=self.max_interval.value()
                 )
-            self.log(f"{self.t('monitor_started')} {details}.")
+            if self.quiet_enabled.isChecked():
+                details += self.t("detail_quiet").format(
+                    van=self.quiet_from.time().toString("HH:mm"),
+                    tot=self.quiet_to.time().toString("HH:mm"),
+                )
+            self.log(self.t("log_monitor_started").format(details=details))
             self.run_monitor_cycle()
         else:
             self.timer.stop()
             self.update_status(True)
-            self.log(self.t("monitor_started") + " (eenmalige bulk-scan)")
+            self.log(self.t("log_monitor_started").format(details=self.t("bulk_scan")))
             self.run_monitor_cycle()
 
     def next_interval_ms(self):
@@ -1336,7 +1349,7 @@ class MainWindow(QMainWindow):
 
         if found_new:
             if self.current_interval_seconds and self.current_interval_seconds > base:
-                self.log(f"Nieuwe advertentie gevonden: interval terug naar {base}s.")
+                self.log(self.t("log_interval_reset").format(seconden=base))
             self.current_interval_seconds = base
             self.empty_cycles = 0
             return
@@ -1348,8 +1361,10 @@ class MainWindow(QMainWindow):
 
         if self.current_interval_seconds > previous:
             self.log(
-                f"Niets nieuws ({self.empty_cycles}x): interval nu "
-                f"{int(self.current_interval_seconds)}s."
+                self.t("log_nothing_new").format(
+                    keer=self.empty_cycles,
+                    seconden=int(self.current_interval_seconds),
+                )
             )
 
     def quiet_period_active(self, now=None):
@@ -1390,7 +1405,7 @@ class MainWindow(QMainWindow):
 
     def run_monitor_cycle(self):
         if self.is_refreshing:
-            self.log("Refresh overgeslagen: vorige cyclus loopt nog.")
+            self.log(self.t("log_refresh_skipped"))
             return
 
         term = self.search_term.text().strip()
@@ -1407,14 +1422,17 @@ class MainWindow(QMainWindow):
                 self.in_quiet_period = True
                 self.update_status(True)
                 self.log(
-                    f"Nachtpauze actief tot {self.quiet_to.time().toString('HH:mm')}; "
-                    f"volgende check over {wait // 3600}u {(wait % 3600) // 60}m."
+                    self.t("log_quiet_active").format(
+                        tot=self.quiet_to.time().toString("HH:mm"),
+                        uren=wait // 3600,
+                        minuten=(wait % 3600) // 60,
+                    )
                 )
             return
 
         if self.in_quiet_period:
             self.in_quiet_period = False
-            self.log("Nachtpauze voorbij, monitor hervat.")
+            self.log(self.t("log_quiet_over"))
 
         self.is_refreshing = True
         self.start_btn.setEnabled(False)
@@ -1449,7 +1467,7 @@ class MainWindow(QMainWindow):
             # Doorgaan zou de blokkade alleen verlengen.
             self.timer.stop()
             self.update_status(False)
-            self.log(f"Monitor gestopt: {message}")
+            self.log(self.t("log_monitor_blocked").format(reden=message))
             QMessageBox.warning(self, self.t("monitor_error"), message)
         elif error:
             self.log(f"{self.t('monitor_error')}: {error}")
@@ -1470,18 +1488,10 @@ class MainWindow(QMainWindow):
             )
 
             if getattr(self.monitor, "last_search_exhausted", False):
-                self.log(
-                    "Deze zoekterm staat vrijwel helemaal vol met promotie-advertenties. "
-                    "Maak de zoekterm specifieker of kies een categorie, anders blijft er "
-                    "na het filteren weinig over."
-                )
+                self.log(self.t("log_saturated"))
 
             if getattr(self.monitor, "last_scan_was_priming", False):
-                self.log(
-                    f"Eerste scan voor deze zoekterm: {len(all_items)} bestaande "
-                    "advertenties onthouden, geen meldingen verstuurd. "
-                    "Vanaf nu krijg je alleen nieuwe advertenties."
-                )
+                self.log(self.t("log_first_scan").format(aantal=len(all_items)))
                 # Een eerste scan levert per definitie geen nieuwe advertenties
                 # op. Dat is geen stilte, dus de interval hoort op de ingestelde
                 # snelheid te blijven staan in plaats van meteen op te lopen.
@@ -1514,10 +1524,7 @@ class MainWindow(QMainWindow):
         if not new_items:
             return
         if not self.telegram_enabled.isChecked():
-            self.log(
-                "Telegram staat uit; nieuwe advertenties alleen in het tabblad "
-                "Meldingen."
-            )
+            self.log(self.t("log_telegram_off"))
             return
 
         for item in new_items[: self.MAX_TELEGRAM_MESSAGES_PER_CYCLE]:
@@ -1532,7 +1539,9 @@ class MainWindow(QMainWindow):
                 f"- {i['title']} ({i['price']}) {i['url']}"
                 for i in new_items[self.MAX_TELEGRAM_MESSAGES_PER_CYCLE :]
             )
-            self.queue_telegram(f"En nog {overflow} nieuwe advertenties:\n\n{summary}")
+            self.queue_telegram(
+                self.t("summary_more").format(aantal=overflow) + "\n\n" + summary
+            )
 
     def remember_new_items(self, new_items):
         """Onthoud wanneer een advertentie voor het eerst langskwam.
@@ -1786,18 +1795,18 @@ class MainWindow(QMainWindow):
         item = self.result_by_id(txt(1)) or {}
         self.show_preview_image(item.get("image", ""))
         lines = [
-            f"Titel: {txt(2)}",
+            f"{self.t('label_title')}: {txt(2)}",
             "",
-            f"Prijs: {txt(3)}",
-            f"Locatie: {txt(4)}",
-            f"Tijd: {txt(5)}",
+            f"{self.t('label_price')}: {txt(3)}",
+            f"{self.t('label_location')}: {txt(4)}",
+            f"{self.t('label_time')}: {txt(5)}",
         ]
         if item.get("seller"):
-            lines.append(f"Verkoper: {item['seller']}")
-        lines.append(f"Status: {txt(6)}")
+            lines.append(f"{self.t('label_seller')}: {item['seller']}")
+        lines.append(f"{self.t('label_status')}: {txt(6)}")
         if item.get("description"):
-            lines += ["", "Omschrijving:", item["description"]]
-        lines += ["", f"Link: {txt(7)}"]
+            lines += ["", f"{self.t('label_description')}:", item["description"]]
+        lines += ["", f"{self.t('label_link')}: {txt(7)}"]
 
         self.preview_box.setPlainText("\n".join(lines))
 
@@ -1920,18 +1929,18 @@ class MainWindow(QMainWindow):
         self.telegram_sender.enqueue(token, chat_id, text)
 
     def send_telegram(self, item):
-        prefix = self.message_prefix.text().strip() or "Nieuwe Marktplaats advertentie"
+        prefix = self.message_prefix.text().strip() or self.t("default_prefix")
 
         lines = [
             prefix,
             "",
-            f"Titel: {item.get('title', 'Onbekend')}",
-            f"Prijs: {item.get('price', 'Onbekend')}",
+            f"{self.t('label_title')}: {item.get('title', '?')}",
+            f"{self.t('label_price')}: {item.get('price', '?')}",
         ]
         if item.get("location"):
-            lines.append(f"Locatie: {item['location']}")
-        lines.append(f"Tijd: {item.get('time', 'Onbekend')}")
-        lines.append(f"Link: {item.get('url', '')}")
+            lines.append(f"{self.t('label_location')}: {item['location']}")
+        lines.append(f"{self.t('label_time')}: {item.get('time', '?')}")
+        lines.append(f"{self.t('label_link')}: {item.get('url', '')}")
 
         self.queue_telegram("\n".join(lines))
 
