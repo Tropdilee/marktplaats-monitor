@@ -70,6 +70,59 @@ MIN_INTERVAL_SECONDS = 30
 POSTCODE_PATTERN = re.compile(r"^[1-9]\d{3}\s*([A-Za-z]{2})?$")
 
 
+class MaskedTokenEdit(QLineEdit):
+    """Toont de bot token als sterretjes, met alleen de laatste tekens leesbaar.
+
+    Zodra je in het veld klikt komt de echte token terug om te kunnen plakken of
+    bijwerken; daarbuiten staat er niets bruikbaars in beeld. De echte waarde
+    wordt apart bijgehouden, zodat opslaan nooit per ongeluk de sterretjes
+    wegschrijft.
+    """
+
+    ZICHTBARE_TEKENS = 4
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._waarde = ""
+        self._gemaskeerd = False
+
+    def setValue(self, tekst):
+        self._waarde = (tekst or "").strip()
+        if self.hasFocus():
+            super().setText(self._waarde)
+            self._gemaskeerd = False
+        else:
+            self._toon_masker()
+
+    def value(self):
+        """De echte token, ook als het veld sterretjes laat zien."""
+        if self._gemaskeerd:
+            return self._waarde
+        return self.text().strip()
+
+    def _toon_masker(self):
+        if not self._waarde:
+            super().setText("")
+            self._gemaskeerd = False
+            return
+        staart = self._waarde[-self.ZICHTBARE_TEKENS :]
+        verborgen = max(0, len(self._waarde) - len(staart))
+        super().setText("*" * verborgen + staart)
+        self._gemaskeerd = True
+
+    def focusInEvent(self, event):
+        if self._gemaskeerd:
+            super().setText(self._waarde)
+            self._gemaskeerd = False
+        super().focusInEvent(event)
+
+    def focusOutEvent(self, event):
+        if not self._gemaskeerd:
+            self._waarde = self.text().strip()
+        super().focusOutEvent(event)
+        self._toon_masker()
+
+
 class MonitorWorker(QObject):
     finished = pyqtSignal(list, list, str)
 
@@ -559,7 +612,7 @@ class MainWindow(QMainWindow):
         self.bot_token_label = QLabel("Bot token")
         self.chat_id_label = QLabel("Chat ID")
         self.prefix_label = QLabel("Prefix")
-        self.bot_token = QLineEdit()
+        self.bot_token = MaskedTokenEdit()
         self.chat_id = QLineEdit()
         self.message_prefix = QLineEdit()
 
@@ -969,7 +1022,7 @@ class MainWindow(QMainWindow):
         self.telegram_enabled.setChecked(
             self.settings.value("telegram/enabled", "false") == "true"
         )
-        self.bot_token.setText(self.secret_store.get_token())
+        self.bot_token.setValue(self.secret_store.get_token())
         self.chat_id.setText(self.settings.value("telegram/chat_id", ""))
         self.message_prefix.setText(
             self.settings.value("telegram/prefix", "Nieuwe Marktplaats advertentie")
@@ -1022,7 +1075,7 @@ class MainWindow(QMainWindow):
         self.settings.setValue(
             "telegram/enabled", str(self.telegram_enabled.isChecked()).lower()
         )
-        self.secret_store.set_token(self.bot_token.text())
+        self.secret_store.set_token(self.bot_token.value())
         self.settings.setValue("telegram/chat_id", self.chat_id.text().strip())
         self.settings.setValue("telegram/prefix", self.message_prefix.text().strip())
         self.log(f"Telegram instellingen opgeslagen. Token in: {self.secret_store.describe()}.")
@@ -1048,7 +1101,7 @@ class MainWindow(QMainWindow):
         welk van de twee velden je moet nakijken.
         """
         self.save_telegram_settings()
-        token = self.bot_token.text().strip()
+        token = self.bot_token.value()
         chat_id = self.chat_id.text().strip()
 
         if not token or not chat_id:
@@ -1093,7 +1146,7 @@ class MainWindow(QMainWindow):
     def fetch_chat_id(self):
         """Zoek het chat ID op uit de berichten die de bot net heeft gekregen."""
         self.save_telegram_settings()
-        token = self.bot_token.text().strip()
+        token = self.bot_token.value()
 
         if not looks_like_token(token):
             QMessageBox.warning(
@@ -1857,7 +1910,7 @@ class MainWindow(QMainWindow):
             self.open_selected_listing()
 
     def queue_telegram(self, text):
-        token = self.bot_token.text().strip()
+        token = self.bot_token.value()
         chat_id = self.chat_id.text().strip()
 
         if not token or not chat_id:

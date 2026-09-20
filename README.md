@@ -192,6 +192,10 @@ QSettings en zegt dat in de log, zodat je weet dat de token dan leesbaar op
 schijf staat. Het chat-ID blijft gewoon in QSettings staan: dat is een
 adres, geen sleutel.
 
+In het venster staat de token als sterretjes met alleen de laatste vier tekens
+zichtbaar, zodat je wel kunt zien welke token er staat maar niemand hem van je
+scherm kan overschrijven. Klik in het veld om hem te bewerken.
+
 De sleutelbos beschermt tegen meelezen, back-ups en per ongeluk delen. Het
 beschermt niet tegen software die al onder jouw eigen account draait, want die
 mag de sleutelbos net zo goed openen.
