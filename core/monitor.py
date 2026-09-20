@@ -336,11 +336,13 @@ class MarktplaatsMonitor:
         try:
             offset = 0
             for _ in range(MAX_PAGES):
-                # Admarkt-advertenties en advertenties zonder bruikbare prijs
-                # vallen hierna nog af, dus we halen per pagina wat ruimer op
-                # dan er nog nodig is. Anders levert een strak filter (zoals
-                # "alleen gratis") maar een handjevol resultaten op.
-                page_size = min(MAX_API_LIMIT, max(wanted - len(collected), 30))
+                # Altijd een volle pagina opvragen, ook als er nog maar een
+                # paar resultaten nodig zijn. Eén verzoek van 100 kost hetzelfde
+                # als een verzoek van 30, maar scheelt pagina's - en elke pagina
+                # kost door de wachttijd tussen verzoeken zo'n 5 seconden. Met
+                # een streng filter zoals "alleen gratis" scheelt dat het
+                # verschil tussen acht en drie ronden.
+                page_size = MAX_API_LIMIT
                 params = self.build_search_params(
                     term,
                     max_price,

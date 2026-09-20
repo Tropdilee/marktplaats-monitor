@@ -8,8 +8,8 @@ import webbrowser
 from datetime import datetime
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, QSettings, QTime, QTimer, QObject, pyqtSignal, QThread
-from PyQt6.QtGui import QAction, QColor, QFont
+from PyQt6.QtCore import Qt, QSettings, QSize, QTime, QTimer, QObject, pyqtSignal, QThread
+from PyQt6.QtGui import QAction, QColor, QFont, QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QApplication,
     QMainWindow,
@@ -40,6 +40,7 @@ from PyQt6.QtWidgets import (
 )
 
 from core.categories import ALL_CATEGORIES, CategoryStore
+from core.images import RULE_PREVIEW, RULE_THUMBNAIL, ImageLoader, sized_url
 from core.monitor import MarktplaatsMonitor, RateLimited
 from core.saved_lists import SavedListsManager
 from core.secrets import SecretStore
@@ -172,6 +173,9 @@ class MainWindow(QMainWindow):
     # Standaardduur van de "Nieuw"-markering in de resultaten, in minuten.
     DEFAULT_NEW_MARKER_MINUTES = 15
 
+    # Afmeting van het miniatuur in de resultatenlijst.
+    THUMBNAIL_SIZE = QSize(64, 48)
+
     def __init__(self):
         super().__init__()
         self.settings = QSettings(ORG_NAME, APP_NAME)
@@ -208,6 +212,12 @@ class MainWindow(QMainWindow):
         self.marker_timer = QTimer(self)
         self.marker_timer.timeout.connect(self.refresh_new_markers)
         self.marker_timer.start(30000)
+
+        # url -> QPixmap, alleen aan te raken vanaf de GUI-thread.
+        self.image_cache = {}
+        self.image_loader = ImageLoader(parent=self)
+        self.image_loader.loaded.connect(self.on_image_loaded)
+        self.image_loader.start()
 
         self.telegram_sender = TelegramSender(self)
         self.telegram_sender.logged.connect(self.log)
@@ -514,6 +524,8 @@ class MainWindow(QMainWindow):
         self.show_location = QCheckBox()
         self.show_time = QCheckBox()
         self.compact_mode = QCheckBox()
+        self.show_images = QCheckBox()
+        self.show_images.toggled.connect(self.on_show_images_toggled)
         self.language_combo = QComboBox()
         self.language_combo.addItems(["Nederlands", "English"])
         self.language_combo.currentTextChanged.connect(self.set_language)
@@ -524,6 +536,7 @@ class MainWindow(QMainWindow):
         form.addWidget(self.show_location, 2, 0, 1, 2)
         form.addWidget(self.show_time, 3, 0, 1, 2)
         form.addWidget(self.compact_mode, 4, 0, 1, 2)
+        form.addWidget(self.show_images, 5, 0, 1, 2)
 
         layout.addWidget(self.view_group)
         layout.addStretch(1)
@@ -626,6 +639,14 @@ class MainWindow(QMainWindow):
         # De titel is de kolom die je echt wilt lezen, dus die krijgt de ruimte.
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(7, QHeaderView.ResizeMode.Interactive)
+        # Smal houden: de link is via dubbelklik en de knop te openen, de
+        # volledige URL staat in de preview.
+        self.results_table.setColumnWidth(7, 90)
+
+        # Zonder dit breken lange titels en links over meerdere regels af en
+        # worden de rijen zo hoog dat er nog maar een handvol in beeld past.
+        self.results_table.setWordWrap(False)
+        self.results_table.setTextElideMode(Qt.TextElideMode.ElideRight)
 
         self.results_table.setSortingEnabled(True)
         self.results_table.itemSelectionChanged.connect(self.show_selected_result_preview)
@@ -648,6 +669,14 @@ class MainWindow(QMainWindow):
         bottom_layout = QVBoxLayout(bottom)
         self.preview_group = QGroupBox()
         preview_layout = QVBoxLayout(self.preview_group)
+
+        self.preview_image = QLabel()
+        self.preview_image.setObjectName("previewImage")
+        self.preview_image.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.preview_image.setMaximumSize(QSize(260, 190))
+        self.preview_image.setMinimumHeight(0)
+        self.preview_image.hide()
+        preview_layout.addWidget(self.preview_image, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         self.preview_box = QTextEdit()
         self.preview_box.setObjectName("previewBox")
@@ -829,6 +858,7 @@ class MainWindow(QMainWindow):
         self.show_location.setText(self.t("show_location"))
         self.show_time.setText(self.t("show_time"))
         self.compact_mode.setText(self.t("compact"))
+        self.show_images.setText(self.t("show_images"))
 
         self.telegram_enabled.setText(self.t("telegram_toggle"))
         self.clear_btn.setText(self.t("clear_notifications"))
@@ -922,6 +952,9 @@ class MainWindow(QMainWindow):
         self.compact_mode.setChecked(
             self.settings.value("view/compact", "false") == "true"
         )
+        self.show_images.setChecked(
+            self.settings.value("view/show_images", "true") == "true"
+        )
         self.language_combo.setCurrentText(self.current_language)
         self.telegram_enabled.setChecked(
             self.settings.value("telegram/enabled", "false") == "true"
@@ -973,6 +1006,7 @@ class MainWindow(QMainWindow):
         )
         self.settings.setValue("view/show_time", str(self.show_time.isChecked()).lower())
         self.settings.setValue("view/compact", str(self.compact_mode.isChecked()).lower())
+        self.settings.setValue("view/show_images", str(self.show_images.isChecked()).lower())
         self.settings.setValue("ui/language", self.current_language)
         self.apply_view_options()
         self.log(self.t("settings_saved"))
@@ -1009,9 +1043,15 @@ class MainWindow(QMainWindow):
         self.results_table.setColumnHidden(3, not self.show_prices.isChecked())
         self.results_table.setColumnHidden(4, not self.show_location.isChecked())
         self.results_table.setColumnHidden(5, not self.show_time.isChecked())
-        self.results_table.verticalHeader().setDefaultSectionSize(
-            26 if self.compact_mode.isChecked() else 34
+        toont_beeld = self.show_images.isChecked()
+        self.results_table.setIconSize(
+            self.THUMBNAIL_SIZE if toont_beeld else QSize(0, 0)
         )
+        hoogte = 26 if self.compact_mode.isChecked() else 34
+        if toont_beeld:
+            # Rij moet het miniatuur kwijt kunnen, met een paar pixels lucht.
+            hoogte = max(hoogte, self.THUMBNAIL_SIZE.height() + 8)
+        self.results_table.verticalHeader().setDefaultSectionSize(hoogte)
 
     def set_language(self, lang):
         self.current_language = lang
@@ -1228,6 +1268,9 @@ class MainWindow(QMainWindow):
         self.is_refreshing = True
         self.start_btn.setEnabled(False)
         self.check_now_btn.setEnabled(False)
+        # Een cyclus kan door de wachttijd tussen verzoeken een paar seconden
+        # duren. Zonder dit lijkt het venster te hangen.
+        self.status_label.setText(self.t("status_searching"))
 
         self.worker_thread = QThread()
         self.worker = MonitorWorker(
@@ -1299,6 +1342,7 @@ class MainWindow(QMainWindow):
         self.is_refreshing = False
         self.start_btn.setEnabled(True)
         self.check_now_btn.setEnabled(True)
+        self.update_status(self.timer.isActive())
 
         if self.timer.isActive():
             # Elke cyclus een nieuwe spreiding op de interval.
@@ -1413,6 +1457,10 @@ class MainWindow(QMainWindow):
 
             for offset, val in enumerate(vals, start=1):
                 twi = QTableWidgetItem(str(val))
+                if offset == 2:
+                    # Het miniatuur hangt aan de titelcel, zodat de bestaande
+                    # kolomindeling ongemoeid blijft.
+                    self.attach_thumbnail(twi, item.get("image", ""))
                 if offset == 6 and val and self.auto_mark.isChecked():
                     twi.setForeground(QColor(self.theme().success))
                 self.results_table.setItem(row, offset, twi)
@@ -1455,6 +1503,91 @@ class MainWindow(QMainWindow):
             self.checked_ids.add(id_cell.text())
         else:
             self.checked_ids.discard(id_cell.text())
+
+    def on_show_images_toggled(self, aan):
+        self.apply_view_options()
+        if self.current_results:
+            self.populate_results_table(self.current_results, [])
+        if not aan:
+            self.preview_image.clear()
+            self.preview_image.hide()
+
+    def attach_thumbnail(self, cell, image_url):
+        """Zet het miniatuur op een cel, of vraag het op als het er nog niet is."""
+        if not image_url or not self.show_images.isChecked():
+            return
+
+        url = sized_url(image_url, RULE_THUMBNAIL)
+        pixmap = self.image_cache.get(url)
+        if pixmap is not None:
+            cell.setIcon(QIcon(pixmap))
+        else:
+            self.image_loader.request(url)
+
+    def on_image_loaded(self, url, image):
+        """Een afbeelding is binnen; bewaren en in beeld zetten."""
+        pixmap = QPixmap.fromImage(image).scaled(
+            self.THUMBNAIL_SIZE,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        self.image_cache[url] = pixmap
+
+        if not self.show_images.isChecked():
+            return
+
+        # Zowel de lijst als de preview kunnen op deze afbeelding wachten.
+        self.results_table.blockSignals(True)
+        for row in range(self.results_table.rowCount()):
+            id_cell = self.results_table.item(row, 1)
+            title_cell = self.results_table.item(row, 2)
+            if not id_cell or not title_cell:
+                continue
+            item = self.result_by_id(id_cell.text())
+            if item and sized_url(item.get("image", ""), RULE_THUMBNAIL) == url:
+                title_cell.setIcon(QIcon(pixmap))
+        self.results_table.blockSignals(False)
+
+        if url == getattr(self, "pending_preview_url", None):
+            self.preview_image.setPixmap(
+                pixmap.scaled(
+                    self.preview_image.maximumSize(),
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+            )
+
+    def show_preview_image(self, image_url):
+        """Toon de grotere afbeelding boven de preview-tekst."""
+        if not image_url or not self.show_images.isChecked():
+            self.preview_image.clear()
+            self.preview_image.hide()
+            self.pending_preview_url = None
+            return
+
+        url = sized_url(image_url, RULE_PREVIEW)
+        self.pending_preview_url = url
+        self.preview_image.show()
+
+        pixmap = self.image_cache.get(url)
+        if pixmap is None:
+            image = self.image_loader.cached_image(url)
+            if image is not None:
+                pixmap = QPixmap.fromImage(image)
+                self.image_cache[url] = pixmap
+
+        if pixmap is None:
+            self.preview_image.setText(self.t("image_loading"))
+            self.image_loader.request(url)
+            return
+
+        self.preview_image.setPixmap(
+            pixmap.scaled(
+                self.preview_image.maximumSize(),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+        )
 
     def refresh_new_markers(self):
         """Werk alleen de Statuskolom bij, zodat de leeftijd blijft kloppen.
@@ -1499,6 +1632,7 @@ class MainWindow(QMainWindow):
             return cell.text() if cell else ""
 
         item = self.result_by_id(txt(1)) or {}
+        self.show_preview_image(item.get("image", ""))
         lines = [
             f"Titel: {txt(2)}",
             "",
@@ -1654,6 +1788,8 @@ class MainWindow(QMainWindow):
         self.marker_timer.stop()
         self.telegram_sender.stop()
         self.telegram_sender.wait(3000)
+        self.image_loader.stop()
+        self.image_loader.wait(3000)
 
         if self.worker_thread is not None:
             self.worker_thread.quit()

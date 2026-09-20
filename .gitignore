@@ -16,3 +16,6 @@ data/saved_lists/
 
 # Losse notities en exports
 *.log
+
+# Gecachete advertentie-afbeeldingen
+data/image_cache/

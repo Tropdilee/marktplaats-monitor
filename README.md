@@ -113,6 +113,20 @@ Voor het opsporen van nieuwe advertenties is een laag aantal resultaten het
 beste: de nieuwste staan vooraan, dus 30 tot 100 volstaat. Boven de 100 doet de
 app een eenmalige bulk-scan in plaats van te blijven monitoren.
 
+Elk verzoek haalt een volle pagina van 100 op, ook als er minder nodig is. Eén
+groot verzoek kost namelijk evenveel wachttijd als een klein, dus zo blijft het
+aantal ronden laag: met een streng filter scheelde dat acht ronden van vijf
+seconden tegenover één.
+
+## Afbeeldingen
+
+De foto bij een advertentie komt van images.marktplaats.com, een aparte CDN die
+losstaat van de zoek-API. Die telt dus niet mee voor het aantal zoekverzoeken.
+In de lijst staat een miniatuur van ongeveer 2 kB, in de preview een grotere
+versie van ongeveer 56 kB. Alles wordt gecachet in `data/image_cache/`, zodat
+een refresh of een herstart niets opnieuw ophaalt. Uit te zetten via
+"Afbeeldingen tonen" op het tabblad Weergave.
+
 ## Bestanden
 
 ```
@@ -121,6 +135,7 @@ core/monitor.py         zoeken, filteren en bijhouden wat al gezien is
 core/categories.py      categorielijst met cache op schijf
 core/telegram_client.py versturen van een Telegram-bericht
 core/secrets.py         token in de sleutelbos van het systeem
+core/images.py          advertentiefoto's ophalen en cachen
 core/saved_lists.py     opgeslagen lijsten als JSON en TXT
 core/settings_manager.py zoekprofielen
 core/translations.py    Nederlandse en Engelse teksten
@@ -130,6 +145,7 @@ ui/theme.py             kleuren, lettergrootte en stylesheet
 data/seen_ids.json      welke advertenties al voorbij zijn gekomen
 data/categories.json    gecachete categorielijst
 data/saved_lists/       opgeslagen lijsten
+data/image_cache/       gecachete advertentiefoto's
 ```
 
 Instellingen staan in QSettings (op Linux onder `~/.config/PerplexityLocal/`).

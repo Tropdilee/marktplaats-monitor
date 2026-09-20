@@ -45,6 +45,7 @@ TRANSLATIONS = {
         "show_location": "Locatie tonen",
         "show_time": "Tijd tonen",
         "compact": "Compacte rijen",
+        "show_images": "Afbeeldingen tonen",
         "language": "Taal",
         "clear_notifications": "Meldingen wissen",
         "open_link": "Open advertentie",
@@ -86,6 +87,8 @@ TRANSLATIONS = {
         "preview_title": "Advertentie preview",
         "preview_empty": "Selecteer een advertentie om details te bekijken.",
         "status_running": "Monitor actief",
+        "status_searching": "Bezig met zoeken…",
+        "image_loading": "Afbeelding laden…",
         "status_stopped": "Monitor gestopt",
     },
     "English": {
@@ -134,6 +137,7 @@ TRANSLATIONS = {
         "show_location": "Show location",
         "show_time": "Show time",
         "compact": "Compact rows",
+        "show_images": "Show images",
         "language": "Language",
         "clear_notifications": "Clear notifications",
         "open_link": "Open listing",
@@ -175,6 +179,8 @@ TRANSLATIONS = {
         "preview_title": "Listing preview",
         "preview_empty": "Select a listing to view details.",
         "status_running": "Monitor running",
+        "status_searching": "Searching…",
+        "image_loading": "Loading image…",
         "status_stopped": "Monitor stopped",
     },
 }
