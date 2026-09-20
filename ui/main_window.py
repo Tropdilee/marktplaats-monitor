@@ -413,6 +413,7 @@ class MainWindow(QMainWindow):
         self.results_limit.setSingleStep(10)
 
         self.use_notifications = QCheckBox()
+        self.use_notifications.toggled.connect(self.set_telegram_enabled)
         self.auto_mark = QCheckBox()
         self.new_marker_label = QLabel()
         self.new_marker_minutes = QSpinBox()
@@ -556,6 +557,7 @@ class MainWindow(QMainWindow):
         form = QGridLayout(box)
 
         self.telegram_enabled = QCheckBox()
+        self.telegram_enabled.toggled.connect(self.set_telegram_enabled)
         self.bot_token_label = QLabel("Bot token")
         self.chat_id_label = QLabel("Chat ID")
         self.prefix_label = QLabel("Prefix")
@@ -930,8 +932,9 @@ class MainWindow(QMainWindow):
         self.quiet_to.setTime(
             QTime.fromString(self.settings.value("search/quiet_to", "07:00"), "HH:mm")
         )
+        # Eén instelling, twee vakjes; telegram_enabled wordt hieronder gezet.
         self.use_notifications.setChecked(
-            self.settings.value("search/notifications", "false") == "true"
+            self.settings.value("telegram/enabled", "false") == "true"
         )
         self.auto_mark.setChecked(
             self.settings.value("search/auto_mark", "true") == "true"
@@ -993,9 +996,6 @@ class MainWindow(QMainWindow):
         self.settings.setValue("search/quiet_from", self.quiet_from.time().toString("HH:mm"))
         self.settings.setValue("search/quiet_to", self.quiet_to.time().toString("HH:mm"))
         self.settings.setValue(
-            "search/notifications", str(self.use_notifications.isChecked()).lower()
-        )
-        self.settings.setValue(
             "search/auto_mark", str(self.auto_mark.isChecked()).lower()
         )
         self.settings.setValue(
@@ -1028,6 +1028,20 @@ class MainWindow(QMainWindow):
         self.settings.setValue("telegram/chat_id", self.chat_id.text().strip())
         self.settings.setValue("telegram/prefix", self.message_prefix.text().strip())
         self.log(f"Telegram instellingen opgeslagen. Token in: {self.secret_store.describe()}.")
+
+    def set_telegram_enabled(self, aan):
+        """Houd de twee vinkjes gelijk.
+
+        Hetzelfde vakje staat op het tabblad Zoeken en op het tabblad Telegram.
+        Eerder waren dat twee losse instellingen die allebei aan moesten staan,
+        met dezelfde tekst erbij - dan zet je er één aan en gebeurt er niets.
+        """
+        for vakje in (self.use_notifications, self.telegram_enabled):
+            if vakje.isChecked() != aan:
+                vakje.blockSignals(True)
+                vakje.setChecked(aan)
+                vakje.blockSignals(False)
+        self.settings.setValue("telegram/enabled", str(bool(aan)).lower())
 
     def test_telegram(self):
         """Controleer eerst de token, daarna pas het chat ID.
@@ -1448,10 +1462,11 @@ class MainWindow(QMainWindow):
 
         if not new_items:
             return
-        if not (
-            self.use_notifications.isChecked()
-            and self.settings.value("telegram/enabled", "false") == "true"
-        ):
+        if not self.telegram_enabled.isChecked():
+            self.log(
+                "Telegram staat uit; nieuwe advertenties alleen in het tabblad "
+                "Meldingen."
+            )
             return
 
         for item in new_items[: self.MAX_TELEGRAM_MESSAGES_PER_CYCLE]:
