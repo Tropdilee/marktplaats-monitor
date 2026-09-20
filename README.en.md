@@ -195,5 +195,9 @@ The keyring protects against reading over your shoulder, backups and accidental
 sharing. It does not protect against software already running as your own user,
 because that may open the keyring just as well.
 
+## Licence
+
+MIT, see [LICENSE](LICENSE).
+
 Deleting `seen_ids.json` means the next scan is a first scan again: it sends no
 notifications and remembers everything anew.

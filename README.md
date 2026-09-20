@@ -205,5 +205,9 @@ De sleutelbos beschermt tegen meelezen, back-ups en per ongeluk delen. Het
 beschermt niet tegen software die al onder jouw eigen account draait, want die
 mag de sleutelbos net zo goed openen.
 
+## Licentie
+
+MIT, zie [LICENSE](LICENSE).
+
 `data/seen_ids.json` verwijderen betekent dat de volgende scan weer een eerste
 scan is: die stuurt geen meldingen en onthoudt alles opnieuw.
