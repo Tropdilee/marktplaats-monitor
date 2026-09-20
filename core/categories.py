@@ -8,13 +8,15 @@ ververst de cache zichzelf zonder extra verkeer richting Marktplaats.
 import json
 from pathlib import Path
 
+from core.paths import data_file
+
 ALL_CATEGORIES = "Alle categorieën"
 
 
 class CategoryStore:
     def __init__(self, path=None):
         if path is None:
-            path = Path(__file__).resolve().parents[1] / "data" / "categories.json"
+            path = data_file("categories.json")
         self.path = Path(path)
         self.categories = self._load()
 

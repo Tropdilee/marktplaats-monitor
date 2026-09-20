@@ -22,6 +22,8 @@ import requests
 from PyQt6.QtCore import QThread, pyqtSignal
 from PyQt6.QtGui import QImage
 
+from core.paths import data_file
+
 USER_AGENT = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/126 Safari/537.36"
@@ -55,7 +57,7 @@ class ImageLoader(QThread):
         self._lock = threading.Lock()
 
         if cache_dir is None:
-            cache_dir = Path(__file__).resolve().parents[1] / "data" / "image_cache"
+            cache_dir = data_file("image_cache")
         self.cache_dir = Path(cache_dir)
 
         self.session = requests.Session()

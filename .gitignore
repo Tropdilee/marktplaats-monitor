@@ -19,3 +19,9 @@ data/saved_lists/
 
 # Gecachete advertentie-afbeeldingen
 data/image_cache/
+
+# Bouwmappen van PyInstaller
+build/
+dist/
+.venv-build/
+*.spec.bak

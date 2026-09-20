@@ -1,0 +1,110 @@
+# Bouwt de app voor Linux, Windows en macOS.
+#
+# PyInstaller kan alleen bouwen voor het systeem waarop het draait, dus hier
+# draait dezelfde bouwstap op drie machines tegelijk. Het resultaat hangt bij de
+# uitvoering als download, en bij een tag ook onder Releases.
+name: Bouw de app
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  bouwen:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            naam: linux
+          - os: windows-latest
+            naam: windows
+          - os: macos-latest
+            naam: macos
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Systeembibliotheken voor Qt (alleen Linux)
+        if: matrix.naam == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxcb-cursor0 libegl1 libgl1
+
+      - name: Pakketten installeren
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pyinstaller
+
+      - name: Bouwen
+        run: python -m PyInstaller packaging/miaw.spec --noconfirm
+
+      - name: Zelftest draaien
+        # Controleert in de gebouwde app of Qt, de gegevensmap, de sleutelbos en
+        # de verbinding met Marktplaats werken. Zonder grafische sessie draait Qt
+        # hier zonder venster.
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          python - <<'PY'
+          import subprocess, sys, glob, os
+          kandidaten = glob.glob("dist/**/MIAW Marktplaats Monitor", recursive=True)
+          kandidaten += glob.glob("dist/**/MIAW Marktplaats Monitor.exe", recursive=True)
+          uitvoerbaar = [k for k in kandidaten if os.path.isfile(k)]
+          if not uitvoerbaar:
+              sys.exit("geen gebouwde app gevonden")
+          r = subprocess.run([uitvoerbaar[0], "--selftest"], capture_output=True, text=True)
+          print(r.stdout or r.stderr)
+          # De Telegram- en sleutelboscontrole kunnen op een bouwmachine niet
+          # slagen; alleen een crash is hier een probleem.
+          if "zelftest" not in (r.stdout or ""):
+              sys.exit("de app startte niet")
+          PY
+
+      - name: Inpakken (Linux/macOS)
+        if: matrix.naam != 'windows'
+        run: |
+          cd dist
+          if [ -d "MIAW Marktplaats Monitor.app" ]; then
+            hdiutil create -volname "MIAW Marktplaats Monitor" \
+              -srcfolder "MIAW Marktplaats Monitor.app" \
+              -ov -format UDZO "MIAW-Marktplaats-Monitor-${{ matrix.naam }}.dmg"
+          else
+            tar czf "MIAW-Marktplaats-Monitor-${{ matrix.naam }}.tar.gz" "MIAW Marktplaats Monitor"
+          fi
+
+      - name: Inpakken (Windows)
+        if: matrix.naam == 'windows'
+        run: |
+          Compress-Archive -Path "dist\MIAW Marktplaats Monitor" `
+            -DestinationPath "dist\MIAW-Marktplaats-Monitor-windows.zip" -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MIAW-Marktplaats-Monitor-${{ matrix.naam }}
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/*.dmg
+          if-no-files-found: error
+
+  uitbrengen:
+    needs: bouwen
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: downloads
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: downloads/**/*

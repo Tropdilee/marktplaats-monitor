@@ -6,7 +6,6 @@ import threading
 import time
 import webbrowser
 from datetime import datetime
-from pathlib import Path
 
 from PyQt6.QtCore import Qt, QSettings, QSize, QTime, QTimer, QObject, pyqtSignal, QThread
 from PyQt6.QtGui import QAction, QColor, QFont, QIcon, QPixmap
@@ -39,9 +38,11 @@ from PyQt6.QtWidgets import (
     QTimeEdit,
 )
 
+from core.appinfo import APP_NAME, APP_VERSION, LAST_UPDATE, ORG_NAME
 from core.categories import ALL_CATEGORIES, CategoryStore
 from core.images import RULE_PREVIEW, RULE_THUMBNAIL, ImageLoader, sized_url
 from core.monitor import MarktplaatsMonitor, RateLimited
+from core.paths import data_file
 from core.saved_lists import SavedListsManager
 from core.secrets import SecretStore
 from core.settings_manager import load_profiles, save_profiles
@@ -56,10 +57,7 @@ from core.translations import get_text
 from ui.dialogs import SearchProfileDialog, AppearanceDialog
 from ui.theme import ThemeConfig, build_stylesheet, system_font_family
 
-APP_NAME = "MIAW Marktplaats Monitor"
-ORG_NAME = "PerplexityLocal"
-APP_VERSION = "4.0"
-LAST_UPDATE = "2026-09-19"
+
 
 ALL_SUBCATEGORIES = "Alle subcategorieën"
 
@@ -199,7 +197,7 @@ class MainWindow(QMainWindow):
         self.current_profile_name = None
         self.current_language = self.settings.value("ui/language", "Nederlands")
         self.saved_manager = SavedListsManager(
-            Path(__file__).resolve().parents[1] / "data" / "saved_lists"
+            data_file("saved_lists")
         )
         self.current_results = []
         self.current_saved_items = []

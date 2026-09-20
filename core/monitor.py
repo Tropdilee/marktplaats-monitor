@@ -22,6 +22,8 @@ from urllib.parse import quote_plus
 
 import requests
 
+from core.paths import data_file
+
 USER_AGENT = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/126 Safari/537.36"
@@ -94,7 +96,7 @@ class MarktplaatsMonitor:
         self.last_subcategories = []
 
         if state_path is None:
-            state_path = Path(__file__).resolve().parents[1] / "data" / "seen_ids.json"
+            state_path = data_file("seen_ids.json")
         self.state_path = Path(state_path)
 
         # {zoekterm: {advertentie-id: laatst gezien (unix-tijd)}}

@@ -147,6 +147,16 @@ versie van ongeveer 56 kB. Alles wordt gecachet in `data/image_cache/`, zodat
 een refresh of een herstart niets opnieuw ophaalt. Uit te zetten via
 "Afbeeldingen tonen" op het tabblad Weergave.
 
+## Doorgeven aan iemand anders
+
+Zie `packaging/README.md`. Daar staat hoe je een bundel maakt voor Linux,
+Windows en macOS waarin Python en Qt al zitten, zodat de ontvanger niets hoeft
+te installeren. Bouwen kan alleen op het doelsysteem zelf; de meegeleverde
+GitHub Actions-workflow doet alle drie tegelijk.
+
+Werkt iets niet op de computer van de ontvanger, dan geeft `--selftest` per
+onderdeel aan waar het misgaat.
+
 ## Bestanden
 
 ```
@@ -156,6 +166,9 @@ core/categories.py      categorielijst met cache op schijf
 core/telegram_client.py versturen van een Telegram-bericht
 core/secrets.py         token in de sleutelbos van het systeem
 core/images.py          advertentiefoto's ophalen en cachen
+core/paths.py           waar gegevens bewaard worden
+core/appinfo.py         naam en versie
+core/selftest.py        doorlichten met --selftest
 core/saved_lists.py     opgeslagen lijsten als JSON en TXT
 core/settings_manager.py zoekprofielen
 core/translations.py    Nederlandse en Engelse teksten
