@@ -6,19 +6,13 @@ venv/
 __pycache__/
 *.py[cod]
 
-# Created by the app: memory of seen listings and the category cache
-data/seen_ids.json
-data/seen_ids.json.tmp
-data/categories.json
-
-# Your own saved listing lists
-data/saved_lists/
+# Everything the app writes while running: seen listings, the category cache,
+# cached images, your own saved lists and the self-test report. All of it is
+# generated or personal, and the app recreates the folder when it starts.
+data/
 
 # Loose notes and exports
 *.log
-
-# Cached listing images
-data/image_cache/
 
 # PyInstaller build folders
 build/
