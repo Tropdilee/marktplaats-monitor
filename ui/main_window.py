@@ -39,7 +39,7 @@ from PyQt6.QtWidgets import (
 )
 
 from core.appinfo import APP_NAME, APP_VERSION, LAST_UPDATE, ORG_NAME
-from core.categories import ALL_CATEGORIES, CategoryStore
+from core.categories import CategoryStore
 from core.images import RULE_PREVIEW, RULE_THUMBNAIL, ImageLoader, sized_url
 from core.monitor import MarktplaatsMonitor, RateLimited
 from core.paths import data_file
@@ -58,8 +58,6 @@ from ui.dialogs import SearchProfileDialog, AppearanceDialog
 from ui.theme import ThemeConfig, build_stylesheet, system_font_family
 
 
-
-ALL_SUBCATEGORIES = "Alle subcategorieën"
 
 # The monitor never goes below this interval. Marktplaats names no limit itself,
 # so the safest course is a pace that does not stand out next to ordinary
@@ -415,7 +413,7 @@ class MainWindow(QMainWindow):
         self.category.currentTextChanged.connect(self.on_category_changed)
 
         self.subcategory = QComboBox()
-        self.subcategory.addItem(ALL_SUBCATEGORIES)
+        self.subcategory.addItem(self.t("all_subcategories"))
         self.subcategory.setEnabled(False)
 
         # Distance around the region (in km)
@@ -836,7 +834,7 @@ class MainWindow(QMainWindow):
         # Subcategories belong to one main category, so switching that one makes
         # the old list invalid.
         self.subcategory.clear()
-        self.subcategory.addItem(ALL_SUBCATEGORIES)
+        self.subcategory.addItem(self.t("all_subcategories"))
         self.subcategory.setEnabled(False)
 
     def refresh_subcategories(self):
@@ -856,7 +854,7 @@ class MainWindow(QMainWindow):
         previous = self.subcategory.currentData()
         self.subcategory.blockSignals(True)
         self.subcategory.clear()
-        self.subcategory.addItem(ALL_SUBCATEGORIES)
+        self.subcategory.addItem(self.t("all_subcategories"))
         for option in options:
             label = option["name"]
             if option.get("count"):
@@ -937,10 +935,22 @@ class MainWindow(QMainWindow):
         self.saved_lists_group.setTitle(self.t("saved_lists"))
         self.saved_items_group.setTitle(self.t("saved_items"))
         self.preview_group.setTitle(self.t("preview_title"))
-        self.preview_box.setPlainText(self.t("preview_empty"))
+        if self.results_table.currentRow() >= 0 and self.current_results:
+            self.show_selected_result_preview()
+        else:
+            self.preview_box.setPlainText(self.t("preview_empty"))
         self.appearance_action.setText(self.t("appearance"))
         self.info_action.setText(self.t("info"))
         self.update_region_warning()
+        # De statusregel en de preview stonden er nog in de oude taal; de
+        # categorie-keuzelijsten bevatten bovendien een vertaald item.
+        self.update_status(self.timer.isActive())
+        self.reload_category_combo()
+        if self.subcategory.count():
+            # Alleen de tekst van het eerste item vervangen; een gekozen
+            # subcategorie blijft zo staan.
+            self.subcategory.setItemText(0, self.t("all_subcategories"))
+        self.refresh_subcategories()
 
         self.results_table.setHorizontalHeaderLabels(
             [
@@ -2011,7 +2021,8 @@ class MainWindow(QMainWindow):
         self.current_profile_name = p.get("name")
         self.search_term.setText(p.get("term", ""))
         self.category.setCurrentText(
-            self.category_store.name_for_id(p.get("category_id")) or ALL_CATEGORIES
+            self.category_store.name_for_id(p.get("category_id"))
+            or self.t("all_categories")
         )
         self.region.setText(p.get("region", ""))
         self.max_price.setValue(float(p.get("max_price", 150)))

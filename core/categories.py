@@ -9,8 +9,11 @@ import json
 from pathlib import Path
 
 from core.paths import data_file
+from core.translations import tr
 
-ALL_CATEGORIES = "Alle categorieën"
+def all_categories_label():
+    """Het "alle categorieën"-item, in de ingestelde taal."""
+    return tr("all_categories")
 
 
 class CategoryStore:
@@ -60,10 +63,10 @@ class CategoryStore:
         return False
 
     def names(self):
-        return [ALL_CATEGORIES] + [c["name"] for c in self.categories]
+        return [all_categories_label()] + [c["name"] for c in self.categories]
 
     def id_for_name(self, name):
-        if not name or name == ALL_CATEGORIES:
+        if not name or name == all_categories_label():
             return None
         for c in self.categories:
             if c["name"] == name:
@@ -72,8 +75,8 @@ class CategoryStore:
 
     def name_for_id(self, category_id):
         if not category_id:
-            return ALL_CATEGORIES
+            return all_categories_label()
         for c in self.categories:
             if c["id"] == int(category_id):
                 return c["name"]
-        return ALL_CATEGORIES
+        return all_categories_label()

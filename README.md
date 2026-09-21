@@ -9,6 +9,8 @@ voldoet.
 Het venster is in het Nederlands en het Engels te gebruiken; wisselen kan via
 **Taal / Language** in de menubalk of op het tabblad Weergave.
 
+![De app in gebruik](docs/screenshot-nl.png)
+
 ## Starten
 
 Op Linux:

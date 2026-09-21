@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (
     QDialogButtonBox,
 )
 
-from core.categories import ALL_CATEGORIES, CategoryStore
+from core.categories import CategoryStore, all_categories_label
 from core.translations import tr
 from ui.theme import AppearanceDialog as ThemeAppearanceDialog
 
@@ -30,7 +30,7 @@ class SearchProfileDialog(QDialog):
         self.category = QComboBox()
         self.category.addItems(self.category_store.names())
         self.category.setCurrentText(
-            self.category_store.name_for_id(p.get("category_id")) or ALL_CATEGORIES
+            self.category_store.name_for_id(p.get("category_id")) or all_categories_label()
         )
         self.region = QLineEdit(p.get("region", ""))
 

@@ -178,6 +178,8 @@ TRANSLATIONS = {
         "tg_err_chat": "Het chat ID klopt niet. Stuur je bot eerst een bericht en haal het juiste ID op via de knop 'Chat ID ophalen'.",
         "tg_err_blocked": "De bot mag jou geen berichten sturen. Open de chat met je bot en stuur /start.",
         "tg_err_chatid": "Het chat ID ontbreekt of heeft een verkeerde vorm.",
+        "all_categories": "Alle categorieën",
+        "all_subcategories": "Alle subcategorieën",
     },
     "English": {
         "title": "MIAW Marktplaats Monitor",
@@ -358,6 +360,8 @@ TRANSLATIONS = {
         "tg_err_chat": "The chat ID is wrong. Send your bot a message first and fetch the right ID with the 'Fetch chat ID' button.",
         "tg_err_blocked": "The bot is not allowed to message you. Open the chat with your bot and send /start.",
         "tg_err_chatid": "The chat ID is missing or has the wrong shape.",
+        "all_categories": "All categories",
+        "all_subcategories": "All subcategories",
     },
 }
 

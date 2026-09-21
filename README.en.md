@@ -8,6 +8,8 @@ soon as a new listing appears that matches your search.
 The interface is available in Dutch and English — switch under **Taal / Language**
 in the menu bar, or on the View tab.
 
+![The app in use](docs/screenshot-en.png)
+
 ## Getting started
 
 On Linux:
