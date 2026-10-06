@@ -5,9 +5,12 @@ That is convenient, but in a bundled app (PyInstaller) `__file__` points at a
 temporary folder that disappears on exit and cannot be written to anyway. That
 case needs a real per-user folder:
 
-- Linux   ~/.local/share/PerplexityLocal/MIAW Marktplaats Monitor
-- Windows C:\\Users\\<name>\\AppData\\Local\\PerplexityLocal\\MIAW Marktplaats Monitor
-- macOS   ~/Library/Application Support/PerplexityLocal/MIAW Marktplaats Monitor
+- Linux   ~/.local/share/MIAW/MIAW Marktplaats Monitor
+- Windows C:\\Users\\<name>\\AppData\\Local\\MIAW\\MIAW Marktplaats Monitor
+- macOS   ~/Library/Application Support/MIAW/MIAW Marktplaats Monitor
+
+Versions before 4.1 used "PerplexityLocal" instead of "MIAW"; core/migrate.py
+moves an existing install across on first start.
 
 QStandardPaths picks the right one per system, so no extra package is needed.
 """

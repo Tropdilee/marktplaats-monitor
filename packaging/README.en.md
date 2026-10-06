@@ -18,7 +18,7 @@ Two options:
    Windows and a Mac machine yourself. Push a tag:
 
    ```bash
-   git tag v4.0 && git push origin v4.0
+   git tag v4.1 && git push origin v4.1
    ```
 
    The three files then appear under Releases. Without a tag you can also start
@@ -91,9 +91,9 @@ In a bundled app, not next to the program but with the user:
 
 | System | Folder |
 | --- | --- |
-| Linux | `~/.local/share/PerplexityLocal/MIAW Marktplaats Monitor/` |
-| Windows | `%LOCALAPPDATA%\PerplexityLocal\MIAW Marktplaats Monitor\` |
-| macOS | `~/Library/Application Support/PerplexityLocal/MIAW Marktplaats Monitor/` |
+| Linux | `~/.local/share/MIAW/MIAW Marktplaats Monitor/` |
+| Windows | `%LOCALAPPDATA%\MIAW\MIAW Marktplaats Monitor\` |
+| macOS | `~/Library/Application Support/MIAW/MIAW Marktplaats Monitor/` |
 
 That is where `seen_ids.json`, `categories.json`, `image_cache/` and the saved
 lists end up. Settings live separately in QSettings, and the Telegram token in

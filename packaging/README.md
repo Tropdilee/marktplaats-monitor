@@ -18,7 +18,7 @@ Twee mogelijkheden:
    een Windows- en een Mac-computer hebt. Push een tag:
 
    ```bash
-   git tag v4.0 && git push origin v4.0
+   git tag v4.1 && git push origin v4.1
    ```
 
    De drie bestanden verschijnen daarna onder Releases. Zonder tag kun je de
@@ -92,9 +92,9 @@ In een gebundelde app niet naast het programma, maar bij de gebruiker:
 
 | Systeem | Map |
 | --- | --- |
-| Linux | `~/.local/share/PerplexityLocal/MIAW Marktplaats Monitor/` |
-| Windows | `%LOCALAPPDATA%\PerplexityLocal\MIAW Marktplaats Monitor\` |
-| macOS | `~/Library/Application Support/PerplexityLocal/MIAW Marktplaats Monitor/` |
+| Linux | `~/.local/share/MIAW/MIAW Marktplaats Monitor/` |
+| Windows | `%LOCALAPPDATA%\MIAW\MIAW Marktplaats Monitor\` |
+| macOS | `~/Library/Application Support/MIAW/MIAW Marktplaats Monitor/` |
 
 Daar komen `seen_ids.json`, `categories.json`, `image_cache/` en de opgeslagen
 lijsten terecht. Instellingen staan los daarvan in QSettings, en de Telegram-token

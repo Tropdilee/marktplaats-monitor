@@ -21,12 +21,9 @@ import requests
 from PyQt6.QtCore import QThread, pyqtSignal
 from PyQt6.QtGui import QImage
 
+from core.appinfo import USER_AGENT
 from core.paths import data_file
 
-USER_AGENT = (
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/126 Safari/537.36"
-)
 
 # Sizes the CDN offers. Small for the list, larger for the preview.
 RULE_THUMBNAIL = "ecg_mp_eps$_14.jpg"

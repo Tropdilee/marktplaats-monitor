@@ -43,6 +43,14 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt pyinstaller
 
+      - name: Run the tests
+        # Regression tests for the search backend, saved lists, profiles and the
+        # settings migration. A failure here stops the build before anything is
+        # packaged or released.
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m unittest discover -s tests -t . -v
+
       - name: Build
         run: python -m PyInstaller packaging/miaw.spec --noconfirm
 

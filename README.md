@@ -1,4 +1,4 @@
-# MIAW Marktplaats Monitor v4.0
+# MIAW Marktplaats Monitor v4.1
 
 *Nederlands · [English](README.en.md)*
 
@@ -125,7 +125,10 @@ Marktplaats publiceert geen limiet en stuurt geen rate-limit-headers, dus de app
 houdt uit zichzelf afstand:
 
 - minstens 5 seconden tussen twee verzoeken, wat de app ook vraagt;
-- interval minimaal 30 seconden, met 20% spreiding zodat er geen vast ritme ontstaat;
+- interval minimaal 30 seconden, met 20% spreiding zodat de controles over de
+  tijd verdeeld worden in plaats van allemaal op hetzelfde moment;
+- elk verzoek maakt de app bekend met een eigen User-Agent - naam, versie en
+  een link naar deze repository - in plaats van zich voor te doen als browser;
 - **adaptieve interval** — bij stilte loopt de wachttijd op (×1,5 tot het
   ingestelde maximum) en bij een nieuwe advertentie staat hij meteen weer op de
   ingestelde snelheid;
@@ -188,7 +191,9 @@ data/saved_lists/       opgeslagen lijsten
 data/image_cache/       gecachete advertentiefoto's
 ```
 
-Instellingen staan in QSettings (op Linux onder `~/.config/PerplexityLocal/`).
+Instellingen staan in QSettings (op Linux in `~/.config/MIAW/`). Versies van
+voor 4.1 gebruikten `PerplexityLocal` in plaats van `MIAW`; instellingen en
+gegevens verhuizen bij de eerste start van 4.1 vanzelf mee.
 
 De Telegram-token staat daar bewust niet bij: die gaat naar de sleutelbos van
 het systeem (GNOME Keyring of KWallet op Linux, Keychain op macOS, Credential

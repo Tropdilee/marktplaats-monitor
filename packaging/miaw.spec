@@ -94,7 +94,7 @@ if IS_MACOS:
         name="MIAW Marktplaats Monitor.app",
         bundle_identifier="nl.miaw.marktplaatsmonitor",
         info_plist={
-            "CFBundleShortVersionString": "4.0",
+            "CFBundleShortVersionString": "4.1",
             "NSHighResolutionCapable": True,
             # Without this macOS refuses network access inside an app bundle.
             "LSMinimumSystemVersion": "11.0",

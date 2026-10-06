@@ -15,18 +15,16 @@ structure, only unfiltered and capped at 30 results.
 
 import json
 import re
+import threading
 import time
 from pathlib import Path
 from urllib.parse import quote_plus
 
 import requests
 
+from core.appinfo import USER_AGENT
 from core.paths import data_file
-
-USER_AGENT = (
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/126 Safari/537.36"
-)
+from core.translations import tr
 
 API_URL = "https://www.marktplaats.nl/lrp/api/search"
 WEB_URL = "https://www.marktplaats.nl/q/{term}/"
@@ -38,8 +36,12 @@ MAX_PAGES = 10
 # Hard lower bound between two requests, whatever the app asks for. Marktplaats
 # publishes no limit, so we stay well below what a person would do by hand.
 # Without this floor a short interval or a bulk scan could fire a burst of
-# requests within seconds, which is exactly what a security filter picks up on.
+# requests within seconds and put needless load on the server.
 MIN_SECONDS_BETWEEN_REQUESTS = 5.0
+
+# Shortest interval between two monitoring cycles. The search form and the
+# profile window both use this, so a profile cannot ask for less.
+MIN_INTERVAL_SECONDS = 30
 
 # Listings we have not seen in the results for longer than this are forgotten
 # again. That keeps the memory file small without old listings coming back in
@@ -52,17 +54,18 @@ SEEN_RETENTION_SECONDS = 30 * 24 * 3600
 # genuinely new listing never even enters the window.
 PROMOTED_PRIORITY = "DAGTOPPER"
 
-# priceType -> (label, counts as a price for the maximum-price filter)
+# priceType -> (translation key for the label, counts as a price for the
+# maximum-price filter)
 PRICE_TYPE_LABELS = {
     "FIXED": (None, True),
-    "MIN_BID": ("bieden vanaf", True),
-    "FAST_BID": ("Bieden", False),
-    "FREE": ("Gratis", False),
-    "RESERVED": ("Gereserveerd", False),
-    "EXCHANGE": ("Ruilen", False),
-    "NOTK": ("Op aanvraag", False),
-    "ON_REQUEST": ("Op aanvraag", False),
-    "SEE_DESCRIPTION": ("Zie omschrijving", False),
+    "MIN_BID": ("price_bids_from", True),
+    "FAST_BID": ("price_bid", False),
+    "FREE": ("price_free", False),
+    "RESERVED": ("price_reserved", False),
+    "EXCHANGE": ("price_exchange", False),
+    "NOTK": ("price_on_request", False),
+    "ON_REQUEST": ("price_on_request", False),
+    "SEE_DESCRIPTION": ("price_see_description", False),
 }
 
 
@@ -74,6 +77,10 @@ class RateLimited(RuntimeError):
         self.retry_after = retry_after
 
 
+class Cancelled(RuntimeError):
+    """The search was cancelled, for instance because the window is closing."""
+
+
 class MarktplaatsMonitor:
     def __init__(self, state_path=None):
         self.session = requests.Session()
@@ -82,10 +89,13 @@ class MarktplaatsMonitor:
                 "User-Agent": USER_AGENT,
                 "Accept": "application/json, text/plain, */*",
                 "Accept-Language": "nl-NL,nl;q=0.9",
-                "Referer": "https://www.marktplaats.nl/",
             }
         )
         self._last_request_at = 0.0
+
+        # Set by cancel(); every wait in this class checks it, so a scan stops
+        # within one request instead of running to its end.
+        self._cancel = threading.Event()
 
         # Category list from the last response, so the app can show it without
         # making a separate request for it.
@@ -123,13 +133,14 @@ class MarktplaatsMonitor:
         for term, ids in raw.items():
             if not isinstance(ids, dict):
                 continue
-            fresh = {
+            # Kept even when empty: an empty entry still means "this search has
+            # been scanned before". Dropping it would turn the next scan into a
+            # silent first scan and swallow the first listing that ever appears.
+            state[str(term)] = {
                 str(k): float(v)
                 for k, v in ids.items()
                 if isinstance(v, (int, float)) and float(v) >= cutoff
             }
-            if fresh:
-                state[str(term)] = fresh
         return state
 
     def _save_state(self):
@@ -146,35 +157,39 @@ class MarktplaatsMonitor:
             pass
 
     @staticmethod
-    def _state_key(term, category_id=None, subcategory_id=None, hide_promoted=True):
+    def _state_key(
+        term,
+        category_id=None,
+        subcategory_id=None,
+        hide_promoted=True,
+        region=None,
+        distance_km=None,
+        max_price=None,
+        free_only=False,
+    ):
         """Key under which seen listings are stored.
 
-        The category belongs in it: the same search term in a different category
-        is a different search, and therefore starts with its own first scan
-        instead of a wave of notifications.
+        Every filter that changes which listings come back belongs in it. The
+        same term with a higher maximum price, a wider radius or another
+        category is a different search: listings that were simply outside the
+        old filter would otherwise show up as "new" and trigger alerts. A
+        changed search starts with its own silent first scan instead.
         """
         key = " ".join(str(term or "").lower().split())
         if not hide_promoted:
-            # Turning promotions on reveals listings that have never been in
-            # view. A separate key keeps those from going out as "new" all at
-            # once.
             key += "|promo"
         if category_id:
             key += f"|c{int(category_id)}"
             if subcategory_id:
                 key += f"|s{int(subcategory_id)}"
+        if region and distance_km and int(distance_km) > 0:
+            postcode = str(region).replace(" ", "").upper()
+            key += f"|pc{postcode}:{int(distance_km)}"
+        if free_only:
+            key += "|free"
+        elif max_price and float(max_price) > 0:
+            key += f"|max{int(round(float(max_price) * 100))}"
         return key
-
-    def has_seen_term(self, term, category_id=None, subcategory_id=None, hide_promoted=True):
-        """True when this search has been scanned before."""
-        return bool(
-            self._seen.get(self._state_key(term, category_id, subcategory_id, hide_promoted))
-        )
-
-    def forget_term(self, term, category_id=None, subcategory_id=None, hide_promoted=True):
-        """Forget one search's history; the next scan starts clean."""
-        self._seen.pop(self._state_key(term, category_id, subcategory_id, hide_promoted), None)
-        self._save_state()
 
     @property
     def seen_ids(self):
@@ -265,11 +280,20 @@ class MarktplaatsMonitor:
     # Fetching
     # ------------------------------------------------------------------
 
+    def cancel(self):
+        """Stop a running scan at the next opportunity. Safe from any thread."""
+        self._cancel.set()
+
+    def _pause(self, seconds):
+        """Sleep, but wake up and stop as soon as the scan is cancelled."""
+        if self._cancel.wait(max(0.0, seconds)):
+            raise Cancelled()
+
     def _throttle(self):
         """Wait, if needed, until another request may be made."""
-        wait = MIN_SECONDS_BETWEEN_REQUESTS - (time.monotonic() - self._last_request_at)
-        if wait > 0:
-            time.sleep(wait)
+        self._pause(
+            MIN_SECONDS_BETWEEN_REQUESTS - (time.monotonic() - self._last_request_at)
+        )
         self._last_request_at = time.monotonic()
 
     @staticmethod
@@ -296,8 +320,7 @@ class MarktplaatsMonitor:
                 if resp.status_code in (403, 429):
                     # Do not keep retrying here: that only makes it worse.
                     raise RateLimited(
-                        f"Marktplaats blokkeert de verzoeken (HTTP {resp.status_code}). "
-                        "Zet de interval hoger en probeer het later opnieuw.",
+                        tr("rate_limited").format(status=resp.status_code),
                         retry_after=self._retry_after_seconds(resp),
                     )
 
@@ -305,11 +328,11 @@ class MarktplaatsMonitor:
                     resp.raise_for_status()
 
                 last_error = requests.HTTPError(
-                    f"HTTP {resp.status_code} van Marktplaats", response=resp
+                    tr("http_error").format(status=resp.status_code), response=resp
                 )
 
             if attempt < attempts - 1:
-                time.sleep(delay)
+                self._pause(delay)
                 delay *= 2
 
         raise last_error
@@ -376,9 +399,15 @@ class MarktplaatsMonitor:
                     self.last_search_exhausted = True
                     break
                 # Go easy on the server during large bulk scans.
-                time.sleep(0.5)
+                self._pause(0.5)
+        except (RateLimited, Cancelled):
+            # A block must reach the window so the monitor stops. Trying the
+            # web page next would send a second request straight into it.
+            raise
         except Exception:
-            if collected:
+            if collected or not self._fallback_can_honour(
+                region, distance_km, category_id
+            ):
                 raise
             listings = self._fetch_listings_html(term, max_price, wanted)
             self._normalize_page(
@@ -416,10 +445,29 @@ class MarktplaatsMonitor:
                     )
         self.last_subcategories = subcategories
 
+    @staticmethod
+    def _fallback_can_honour(region, distance_km, category_id):
+        """Whether the web-page fallback would return what was asked for.
+
+        That page ignores every search argument. Price, free-only and the
+        promotion filter are applied afterwards anyway, but a location or a
+        category cannot be. Results from the whole country would then be stored
+        under the filtered search and could trigger alerts for listings far
+        outside the radius, so in that case it is better to report the error.
+        """
+        uses_location = bool(region and distance_km and int(distance_km) > 0)
+        return not uses_location and not category_id
+
     def _fetch_listings_html(self, term, max_price, limit):
         """Fallback: read the listings from the web page's __NEXT_DATA__ block."""
         url = self.build_search_url(term, max_price, limit)
+        self._throttle()
         resp = self.session.get(url, timeout=25, headers={"Accept": "text/html"})
+        if resp.status_code in (403, 429):
+            raise RateLimited(
+                tr("rate_limited").format(status=resp.status_code),
+                retry_after=self._retry_after_seconds(resp),
+            )
         resp.raise_for_status()
 
         match = re.search(r'__NEXT_DATA__"[^>]*>(.*?)</script>', resp.text, re.S)
@@ -487,12 +535,12 @@ class MarktplaatsMonitor:
             out.append(
                 {
                     "id": item_id,
-                    "title": self._clean_text(raw.get("title") or "Onbekend"),
+                    "title": self._clean_text(raw.get("title") or tr("unknown")),
                     "price": price_text,
                     "price_value": price_value,
                     "price_type": price_type,
                     "location": self._read_location(raw.get("location")),
-                    "time": self._clean_text(raw.get("date") or "Onbekend"),
+                    "time": self._clean_text(raw.get("date") or tr("unknown")),
                     "seller": self._read_seller(raw.get("sellerInformation")),
                     "description": self._clean_text(raw.get("description") or ""),
                     "image": self._read_image(raw.get("imageUrls")),
@@ -506,10 +554,11 @@ class MarktplaatsMonitor:
     @staticmethod
     def _read_price(price_info):
         if not isinstance(price_info, dict):
-            return None, "Zie advertentie", "UNKNOWN"
+            return None, tr("see_listing"), "UNKNOWN"
 
         price_type = str(price_info.get("priceType") or "UNKNOWN").upper()
-        label, countable = PRICE_TYPE_LABELS.get(price_type, (None, False))
+        label_key, countable = PRICE_TYPE_LABELS.get(price_type, (None, False))
+        label = tr(label_key) if label_key else None
 
         cents = price_info.get("priceCents")
         value = None
@@ -520,11 +569,11 @@ class MarktplaatsMonitor:
                 value = None
 
         if price_type == "FREE":
-            return 0.0, "Gratis", price_type
+            return 0.0, tr("price_free"), price_type
 
         # A bid starting at EUR 0 is not a guide price, just "make an offer".
         if price_type == "MIN_BID" and not value:
-            return None, "Bieden", price_type
+            return None, tr("price_bid"), price_type
 
         if countable and value is not None:
             text = MarktplaatsMonitor._format_euro(value)
@@ -535,7 +584,7 @@ class MarktplaatsMonitor:
         # Bidding without a guide price, price on request, and so on: no usable
         # amount, so price_value stays empty and the maximum-price filter skips
         # this entry.
-        return None, label or "Zie advertentie", price_type
+        return None, label or tr("see_listing"), price_type
 
     @staticmethod
     def _format_euro(value):
@@ -551,7 +600,7 @@ class MarktplaatsMonitor:
                     return MarktplaatsMonitor._clean_text(str(location[key]))
         elif isinstance(location, str) and location.strip():
             return MarktplaatsMonitor._clean_text(location)
-        return "Onbekend"
+        return tr("unknown")
 
     @staticmethod
     def _read_seller(seller):
@@ -616,12 +665,21 @@ class MarktplaatsMonitor:
             hide_promoted=hide_promoted,
         )
 
-        key = self._state_key(term, category_id, subcategory_id, hide_promoted)
-        known = self._seen.get(key)
-        first_scan = not known
-        if known is None:
-            known = {}
-            self._seen[key] = known
+        key = self._state_key(
+            term,
+            category_id=category_id,
+            subcategory_id=subcategory_id,
+            hide_promoted=hide_promoted,
+            region=region,
+            distance_km=distance_km,
+            max_price=max_price,
+            free_only=free_only,
+        )
+        # Whether the key exists, not whether it holds anything. A search that
+        # came back empty the first time has still been scanned; its first
+        # listing ever must be reported, not quietly marked as seen.
+        first_scan = key not in self._seen
+        known = self._seen.setdefault(key, {})
 
         now = time.time()
         new_items = []

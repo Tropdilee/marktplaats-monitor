@@ -17,6 +17,8 @@ If no keyring is available, storage falls back to QSettings. That is reported
 rather than done silently, so it is clear the token then sits readable on disk.
 """
 
+from core.translations import tr
+
 SERVICE_NAME = "MIAW Marktplaats Monitor"
 TOKEN_ENTRY = "telegram_bot_token"
 LEGACY_SETTINGS_KEY = "telegram/bot_token"
@@ -54,8 +56,8 @@ class SecretStore:
 
     def describe(self):
         if self.available:
-            return f"sleutelbos ({self.backend_name.split('.')[-2]})"
-        return "instellingenbestand (leesbaar)"
+            return tr("store_keyring").format(naam=self.backend_name.split(".")[-2])
+        return tr("store_settings_file")
 
     def get_token(self):
         if self.available:

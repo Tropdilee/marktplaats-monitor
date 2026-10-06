@@ -11,8 +11,9 @@ from pathlib import Path
 from core.paths import data_file
 from core.translations import tr
 
+
 def all_categories_label():
-    """Het "alle categorieën"-item, in de ingestelde taal."""
+    """The "all categories" entry, in the selected language."""
     return tr("all_categories")
 
 

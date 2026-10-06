@@ -4,6 +4,7 @@ import re
 import sys
 import threading
 import time
+import traceback
 import webbrowser
 from datetime import datetime
 
@@ -41,9 +42,14 @@ from PyQt6.QtWidgets import (
 from core.appinfo import APP_NAME, APP_VERSION, LAST_UPDATE, ORG_NAME
 from core.categories import CategoryStore
 from core.images import RULE_PREVIEW, RULE_THUMBNAIL, ImageLoader, sized_url
-from core.monitor import MarktplaatsMonitor, RateLimited
+from core.monitor import (
+    MIN_INTERVAL_SECONDS,
+    Cancelled,
+    MarktplaatsMonitor,
+    RateLimited,
+)
 from core.paths import data_file
-from core.saved_lists import SavedListsManager
+from core.saved_lists import CorruptList, InvalidListName, SavedListsManager
 from core.secrets import SecretStore
 from core.settings_manager import load_profiles, save_profiles
 from core.telegram_client import (
@@ -59,10 +65,6 @@ from ui.theme import ThemeConfig, build_stylesheet, system_font_family
 
 
 
-# The monitor never goes below this interval. Marktplaats names no limit itself,
-# so the safest course is a pace that does not stand out next to ordinary
-# browsing.
-MIN_INTERVAL_SECONDS = 30
 
 # Dutch postcode: four digits (not starting with 0), optionally followed by two
 # letters. Marktplaats accepts both forms.
@@ -163,11 +165,37 @@ class MonitorWorker(QObject):
                 hide_promoted=self.hide_promoted,
             )
             self.finished.emit(new_items, all_items, "")
+        except Cancelled:
+            # The window is closing; nobody is waiting for a result.
+            self.finished.emit([], [], "CANCELLED|")
         except RateLimited as e:
             # Flagged separately so the window can stop the monitor.
             self.finished.emit([], [], f"RATE_LIMIT|{e}")
         except Exception as e:
             self.finished.emit([], [], f"{type(e).__name__}: {e}")
+
+
+class BackgroundCall(QThread):
+    """Runs one blocking call off the GUI thread and reports its result.
+
+    The result, or the exception it raised, arrives through `done` on the GUI
+    thread, where it is safe to open dialogs. Used for the Telegram test and the
+    chat-ID lookup, which could otherwise freeze the window for up to 40 seconds
+    when Telegram is slow.
+    """
+
+    done = pyqtSignal(object)
+
+    def __init__(self, fn, parent=None):
+        super().__init__(parent)
+        self._fn = fn
+
+    def run(self):
+        try:
+            result = self._fn()
+        except Exception as exc:  # handed to the GUI thread to report
+            result = exc
+        self.done.emit(result)
 
 
 class TelegramSender(QThread):
@@ -219,7 +247,8 @@ class MainWindow(QMainWindow):
     # Above this count the rest of a cycle goes out as a single summary.
     MAX_TELEGRAM_MESSAGES_PER_CYCLE = 10
 
-    # Jitter on the interval, so requests never fall into an exact rhythm.
+    # Spread on the interval, so requests are spread out over time instead of
+    # all landing on the same beat.
     INTERVAL_JITTER = 0.2
 
     # How much the interval grows per empty cycle while nothing is new.
@@ -274,6 +303,9 @@ class MainWindow(QMainWindow):
         self.image_loader = ImageLoader(parent=self)
         self.image_loader.loaded.connect(self.on_image_loaded)
         self.image_loader.start()
+
+        # The Telegram test or chat-ID lookup that is running, if any.
+        self._telegram_call = None
 
         self.telegram_sender = TelegramSender(self)
         self.telegram_sender.logged.connect(self.log)
@@ -687,7 +719,7 @@ class MainWindow(QMainWindow):
 
         self.results_table = QTableWidget(0, 8)
         self.results_table.setHorizontalHeaderLabels(
-            ["Sel", "ID", "Titel", "Prijs", "Locatie", "Tijd", "Status", "Link"]
+            ["Sel", "ID", "", "", "", "", "Status", "Link"]  # filled in by apply_language
         )
 
         header = self.results_table.horizontalHeader()
@@ -942,13 +974,13 @@ class MainWindow(QMainWindow):
         self.appearance_action.setText(self.t("appearance"))
         self.info_action.setText(self.t("info"))
         self.update_region_warning()
-        # De statusregel en de preview stonden er nog in de oude taal; de
-        # categorie-keuzelijsten bevatten bovendien een vertaald item.
+        # The status line and the preview were still in the old language, and
+        # the category lists hold a translated entry as well.
         self.update_status(self.timer.isActive())
         self.reload_category_combo()
         if self.subcategory.count():
-            # Alleen de tekst van het eerste item vervangen; een gekozen
-            # subcategorie blijft zo staan.
+            # Replace only the first entry's text, so a chosen subcategory
+            # stays selected.
             self.subcategory.setItemText(0, self.t("all_subcategories"))
         self.refresh_subcategories()
 
@@ -956,10 +988,10 @@ class MainWindow(QMainWindow):
             [
                 "Sel",
                 "ID",
-                "Titel" if self.current_language == "Nederlands" else "Title",
-                "Prijs" if self.current_language == "Nederlands" else "Price",
-                "Locatie" if self.current_language == "Nederlands" else "Location",
-                "Tijd" if self.current_language == "Nederlands" else "Posted",
+                self.t("label_title"),
+                self.t("label_price"),
+                self.t("label_location"),
+                self.t("label_time"),
                 "Status",
                 "Link",
             ]
@@ -1107,6 +1139,35 @@ class MainWindow(QMainWindow):
                 vakje.blockSignals(False)
         self.settings.setValue("telegram/enabled", str(bool(aan)).lower())
 
+    def run_telegram_call(self, fn, on_done):
+        """Run one Telegram request in the background, with its buttons disabled."""
+        if self._telegram_call is not None:
+            return
+
+        buttons = (self.telegram_test_btn, self.telegram_chatid_btn)
+        for button in buttons:
+            button.setEnabled(False)
+        self.status_label.setText(self.t("telegram_busy"))
+
+        call = BackgroundCall(fn, self)
+
+        def finished(result):
+            self._telegram_call = None
+            for button in buttons:
+                button.setEnabled(True)
+            self.update_status(self.timer.isActive())
+            if isinstance(result, Exception):
+                message = f"{type(result).__name__}: {result}"
+                self.log(self.t("log_telegram_error").format(fout=message))
+                QMessageBox.warning(self, "Telegram", message)
+            else:
+                on_done(result)
+
+        call.done.connect(finished)
+        call.finished.connect(call.deleteLater)
+        self._telegram_call = call
+        call.start()
+
     def test_telegram(self):
         """Check the token first, and only then the chat ID.
 
@@ -1122,40 +1183,47 @@ class MainWindow(QMainWindow):
             return
 
         if not looks_like_token(token):
-            uitleg = self.t("token_wrong_shape").format(
+            explanation = self.t("token_wrong_shape").format(
                 aantal=len(token),
                 extra=self.t("token_with_space") if " " in token else "",
             )
-            self.log(f"Telegram test: {uitleg.splitlines()[0]}")
-            QMessageBox.warning(self, "Telegram", uitleg)
+            self.log(f"Telegram test: {explanation.splitlines()[0]}")
+            QMessageBox.warning(self, "Telegram", explanation)
             return
 
-        ok, data = get_bot_info(token)
-        if not ok:
-            uitleg = describe_error(data)
-            self.log(f"Telegram test mislukt: {uitleg}")
-            QMessageBox.warning(self, "Telegram", uitleg)
-            return
+        text = f"{self.t('test_message')} {APP_NAME} v{APP_VERSION}"
 
-        botnaam = (data.get("result") or {}).get("username", "?")
+        def check():
+            ok, data = get_bot_info(token)
+            if not ok:
+                return "token", describe_error(data), None
+            bot = (data.get("result") or {}).get("username", "?")
+            ok, data = send_telegram_message(token, chat_id, text)
+            if ok:
+                return "ok", None, bot
+            return "chat", describe_error(data), bot
 
-        ok, data = send_telegram_message(
-            token, chat_id, f"{self.t('test_message')} {APP_NAME} v{APP_VERSION}"
-        )
-        if ok:
-            self.log(f"Telegram test geslaagd via @{botnaam}.")
+        self.run_telegram_call(check, self._show_telegram_test_result)
+
+    def _show_telegram_test_result(self, result):
+        outcome, explanation, bot = result
+        if outcome == "ok":
+            self.log(self.t("log_telegram_test_ok").format(bot=bot))
             QMessageBox.information(
                 self,
                 "Telegram",
-                f"{self.t('telegram_test_ok')}\n\n{self.t('telegram_bot_label')}: @{botnaam}",
+                f"{self.t('telegram_test_ok')}\n\n{self.t('telegram_bot_label')}: @{bot}",
             )
+            return
+
+        self.log(self.t("log_telegram_test_failed").format(fout=explanation))
+        if outcome == "token":
+            QMessageBox.warning(self, "Telegram", explanation)
         else:
-            uitleg = describe_error(data)
-            self.log(f"Telegram test mislukt: {uitleg}")
             QMessageBox.warning(
                 self,
                 "Telegram",
-                self.t("token_works_but").format(bot=botnaam, fout=uitleg),
+                self.t("token_works_but").format(bot=bot, fout=explanation),
             )
 
     def fetch_chat_id(self):
@@ -1164,45 +1232,42 @@ class MainWindow(QMainWindow):
         token = self.bot_token.value()
 
         if not looks_like_token(token):
-            QMessageBox.warning(
-                self, "Telegram", self.t("enter_valid_token")
-            )
+            QMessageBox.warning(self, "Telegram", self.t("enter_valid_token"))
             return
 
-        ok, data, chats = find_chat_ids(token)
+        self.run_telegram_call(lambda: find_chat_ids(token), self._apply_found_chat_ids)
+
+    def _apply_found_chat_ids(self, result):
+        ok, data, chats = result
         if not ok:
             QMessageBox.warning(self, "Telegram", describe_error(data))
             return
 
         if not chats:
-            QMessageBox.information(
-                self,
-                "Telegram",
-                self.t("no_recent_messages"),
-            )
+            QMessageBox.information(self, "Telegram", self.t("no_recent_messages"))
             return
 
         if len(chats) == 1:
-            chat_id, naam = chats[0]
+            chat_id, name = chats[0]
             self.chat_id.setText(chat_id)
             self.save_telegram_settings()
             QMessageBox.information(
                 self,
                 "Telegram",
-                self.t("chat_id_filled").format(id=chat_id, naam=naam),
+                self.t("chat_id_filled").format(id=chat_id, naam=name),
             )
             return
 
-        keuze, akkoord = QInputDialog.getItem(
+        choice, accepted = QInputDialog.getItem(
             self,
             "Telegram",
             self.t("multiple_chats"),
-            [f"{naam} — {chat_id}" for chat_id, naam in chats],
+            [f"{name} — {chat_id}" for chat_id, name in chats],
             0,
             False,
         )
-        if akkoord and keuze:
-            self.chat_id.setText(keuze.rsplit("—", 1)[-1].strip())
+        if accepted and choice:
+            self.chat_id.setText(choice.rsplit("—", 1)[-1].strip())
             self.save_telegram_settings()
 
     def apply_view_options(self):
@@ -1233,27 +1298,25 @@ class MainWindow(QMainWindow):
     def show_info(self):
         changes_nl = (
             "\n\nNieuw in deze versie:\n"
-            "- Zoekt via de zoek-API van Marktplaats, waardoor prijs, afstand\n"
-            "  en categorie echt gefilterd worden\n"
-            "- Sorteert op nieuwste eerst, zodat verse advertenties opvallen\n"
-            "- Promotie-advertenties (Dagtopper) kunnen verborgen worden\n"
-            "- Gezien-advertenties worden bewaard: geen meldingenvloed bij het starten\n"
-            "- Adaptieve interval en nachtpauze beperken het aantal verzoeken\n"
-            "- Telegram verstuurt op de achtergrond, zonder het venster te blokkeren\n"
-            "- Waarschuwing als de regio geen postcode is\n"
-            "- Nieuwe advertenties blijven een instelbare tijd gemarkeerd"
+            "- Een blokkade (HTTP 403/429) stopt de monitor nu ook bij het eerste verzoek\n"
+            "- Een zoekopdracht die leeg begint, meldt de eerste advertentie wel\n"
+            "- Lijstnamen worden opgeschoond; een '/' laat de app niet meer vastlopen\n"
+            "- Een ander filter telt als nieuwe zoekopdracht: geen valse meldingen\n"
+            "- Telegram-test en chat-ID ophalen bevriezen het venster niet meer\n"
+            "- Profielen bewaren ook afstand, gratis en promoties\n"
+            "- De app maakt zich bekend met een eigen User-Agent\n"
+            "- Instellingen staan voortaan onder 'MIAW' en verhuizen vanzelf mee"
         )
         changes_en = (
             "\n\nNew in this version:\n"
-            "- Searches through the Marktplaats search API, so price, distance\n"
-            "  and category are actually applied\n"
-            "- Sorts newest first, so fresh listings stand out\n"
-            "- Promoted listings (Dagtopper) can be hidden\n"
-            "- Seen listings are remembered: no flood of alerts on startup\n"
-            "- Adaptive interval and quiet hours reduce the number of requests\n"
-            "- Telegram sends in the background without freezing the window\n"
-            "- Warns when the region is not a postcode\n"
-            "- New listings stay marked for a configurable time"
+            "- A block (HTTP 403/429) now stops the monitor on the first request too\n"
+            "- A search that starts out empty now reports its first listing\n"
+            "- List names are cleaned up; a '/' no longer crashes the app\n"
+            "- A changed filter counts as a new search: no false alerts\n"
+            "- The Telegram test and chat-ID lookup no longer freeze the window\n"
+            "- Profiles also keep distance, free-only and the promotion setting\n"
+            "- The app identifies itself with its own User-Agent\n"
+            "- Settings now live under 'MIAW' and move across automatically"
         )
         changes = changes_nl if self.current_language == "Nederlands" else changes_en
 
@@ -1323,10 +1386,11 @@ class MainWindow(QMainWindow):
             self.run_monitor_cycle()
 
     def next_interval_ms(self):
-        """Interval with some noise on it.
+        """Interval with some spread on it.
 
-        A request exactly every 60 seconds is a pattern no person ever produces;
-        with some spread it looks like ordinary use.
+        Spreads the checks out over time instead of having every one land on the
+        same beat, which is gentler on the server when several people run the
+        app with the same settings.
         """
         base = self.current_interval_seconds or max(
             MIN_INTERVAL_SECONDS, self.interval.value()
@@ -1471,6 +1535,8 @@ class MainWindow(QMainWindow):
         self.worker_thread.start()
 
     def on_monitor_finished(self, new_items, all_items, error):
+        if error.startswith("CANCELLED|"):
+            return
         if error.startswith("RATE_LIMIT|"):
             message = error.split("|", 1)[1]
             # Carrying on would only prolong the block.
@@ -1515,7 +1581,7 @@ class MainWindow(QMainWindow):
         self.update_status(self.timer.isActive())
 
         if self.timer.isActive():
-            # Fresh jitter on the interval for every cycle.
+            # Fresh spread on the interval for every cycle.
             self.timer.start(self.next_interval_ms())
 
         if self.worker_thread is not None:
@@ -1843,15 +1909,22 @@ class MainWindow(QMainWindow):
         if not ok or not name.strip():
             return
 
-        existing = self.saved_manager.load_list(name.strip())
-        existing_ids = {i.get("id") for i in existing}
-        for item in selected:
-            if item.get("id") not in existing_ids:
-                existing.append(item)
+        try:
+            existing = self.saved_manager.load_list(name)
+            existing_ids = {i.get("id") for i in existing}
+            for item in selected:
+                if item.get("id") not in existing_ids:
+                    existing.append(item)
+            json_path, _ = self.saved_manager.save_list(name, existing)
+        except (InvalidListName, CorruptList) as exc:
+            QMessageBox.warning(self, APP_NAME, str(exc))
+            return
+        except OSError as exc:
+            QMessageBox.warning(self, APP_NAME, self.t("list_write_failed").format(fout=exc))
+            return
 
-        self.saved_manager.save_list(name.strip(), existing)
         self.reload_saved_lists()
-        self.log(f"{self.t('selected_saved')}: {name.strip()}")
+        self.log(f"{self.t('selected_saved')}: {json_path.stem}")
 
     def reload_saved_lists(self):
         self.saved_lists_widget.clear()
@@ -1860,9 +1933,18 @@ class MainWindow(QMainWindow):
 
     def create_new_list(self):
         name, ok = QInputDialog.getText(self, APP_NAME, self.t("choose_list_name"))
-        if ok and name.strip():
-            self.saved_manager.save_list(name.strip(), [])
-            self.reload_saved_lists()
+        if not ok or not name.strip():
+            return
+        try:
+            if not self.saved_manager.load_list(name):
+                self.saved_manager.save_list(name, [])
+        except (InvalidListName, CorruptList) as exc:
+            QMessageBox.warning(self, APP_NAME, str(exc))
+            return
+        except OSError as exc:
+            QMessageBox.warning(self, APP_NAME, self.t("list_write_failed").format(fout=exc))
+            return
+        self.reload_saved_lists()
 
     def load_selected_saved_list(self):
         item = self.saved_lists_widget.currentItem()
@@ -1870,11 +1952,16 @@ class MainWindow(QMainWindow):
             return
 
         name = item.text()
-        self.current_saved_items = self.saved_manager.load_list(name)
         self.saved_items_widget.clear()
+        try:
+            self.current_saved_items = self.saved_manager.load_list(name)
+        except (InvalidListName, CorruptList) as exc:
+            self.current_saved_items = []
+            QMessageBox.warning(self, APP_NAME, str(exc))
+            return
 
         for entry in self.current_saved_items:
-            self.saved_items_widget.addItem(entry.get("title", "Onbekend"))
+            self.saved_items_widget.addItem(entry.get("title") or self.t("unknown"))
 
         self.log(f"{self.t('list_loaded')}: {name}")
 
@@ -1885,11 +1972,11 @@ class MainWindow(QMainWindow):
 
         item = self.current_saved_items[idx]
         preview = (
-            f"Titel: {item.get('title', '')}\n\n"
-            f"Prijs: {item.get('price', '')}\n"
-            f"Locatie: {item.get('location', '')}\n"
-            f"Tijd: {item.get('time', '')}\n\n"
-            f"Link: {item.get('url', '')}"
+            f"{self.t('label_title')}: {item.get('title', '')}\n\n"
+            f"{self.t('label_price')}: {item.get('price', '')}\n"
+            f"{self.t('label_location')}: {item.get('location', '')}\n"
+            f"{self.t('label_time')}: {item.get('time', '')}\n\n"
+            f"{self.t('label_link')}: {item.get('url', '')}"
         )
         self.preview_box.setPlainText(preview)
         self.right_tabs.setCurrentIndex(0)
@@ -1900,8 +1987,15 @@ class MainWindow(QMainWindow):
             return
 
         name = item.text()
-        items = self.saved_manager.load_list(name)
-        json_path, txt_path = self.saved_manager.save_list(name, items)
+        try:
+            items = self.saved_manager.load_list(name)
+            json_path, txt_path = self.saved_manager.save_list(name, items)
+        except (InvalidListName, CorruptList) as exc:
+            QMessageBox.warning(self, APP_NAME, str(exc))
+            return
+        except OSError as exc:
+            QMessageBox.warning(self, APP_NAME, self.t("list_write_failed").format(fout=exc))
+            return
         QMessageBox.information(
             self,
             APP_NAME,
@@ -1956,21 +2050,30 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         self.timer.stop()
         self.marker_timer.stop()
+        # Stops a running scan at its next wait instead of letting a bulk scan
+        # run to the end. A request already on the wire still has to finish
+        # (25 s at most), so hide the window first: closing then feels instant
+        # and Qt is not torn down underneath a running thread.
+        self.monitor.cancel()
+        self.hide()
+
         self.telegram_sender.stop()
-        self.telegram_sender.wait(3000)
         self.image_loader.stop()
+        self.telegram_sender.wait(3000)
         self.image_loader.wait(3000)
 
+        if self._telegram_call is not None:
+            self._telegram_call.wait(30000)
         if self.worker_thread is not None:
             self.worker_thread.quit()
-            self.worker_thread.wait(5000)
+            self.worker_thread.wait(30000)
 
         super().closeEvent(event)
 
     def reload_profiles_list(self):
         self.profiles_list.clear()
         for p in self.profiles:
-            item = QListWidgetItem(p.get("name", "Profiel"))
+            item = QListWidgetItem(p.get("name") or self.t("profile_default"))
             item.setData(Qt.ItemDataRole.UserRole, p)
             self.profiles_list.addItem(item)
 
@@ -2002,9 +2105,13 @@ class MainWindow(QMainWindow):
             return
 
         idx = self.profiles_list.row(item)
-        name = self.profiles[idx].get("name", "Profiel")
+        name = self.profiles[idx].get("name") or self.t("profile_default")
         if (
-            QMessageBox.question(self, "Confirm", f"Delete profile '{name}'?")
+            QMessageBox.question(
+                self,
+                self.t("confirm_title"),
+                self.t("delete_profile_question").format(name=name),
+            )
             == QMessageBox.StandardButton.Yes
         ):
             self.profiles.pop(idx)
@@ -2025,8 +2132,11 @@ class MainWindow(QMainWindow):
             or self.t("all_categories")
         )
         self.region.setText(p.get("region", ""))
+        self.distance.setValue(int(p.get("distance", 0) or 0))
         self.max_price.setValue(float(p.get("max_price", 150)))
         self.interval.setValue(int(p.get("interval", 60)))
+        self.free_only.setChecked(bool(p.get("free_only", False)))
+        self.hide_promoted.setChecked(bool(p.get("hide_promoted", True)))
         self.log(f"{self.t('profile_loaded')}: {self.current_profile_name}")
 
     def open_appearance_dialog(self):
@@ -2035,7 +2145,41 @@ class MainWindow(QMainWindow):
             self.apply_theme()
 
 
+def install_error_handler():
+    """Show unexpected errors instead of letting the app vanish.
+
+    PyQt6 aborts the whole program when an exception escapes a slot - one bad
+    click and the window is gone without a word. With a custom excepthook it
+    calls that instead, so the error is written to crash.log in the data folder
+    and shown in a dialog, and the app keeps running.
+    """
+    log_path = data_file("crash.log")
+
+    def handle(exc_type, exc, tb):
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc, tb)
+            return
+        details = "".join(traceback.format_exception(exc_type, exc, tb))
+        try:
+            with open(log_path, "a", encoding="utf-8") as fh:
+                fh.write(f"--- {datetime.now():%Y-%m-%d %H:%M:%S} ---\n{details}\n")
+        except OSError:
+            pass
+        print(details, file=sys.stderr)
+        if QApplication.instance() is not None:
+            QMessageBox.critical(
+                None,
+                tr("unexpected_error_title"),
+                tr("unexpected_error_body").format(
+                    fout=f"{exc_type.__name__}: {exc}", pad=log_path
+                ),
+            )
+
+    sys.excepthook = handle
+
+
 def main():
+    install_error_handler()
     app = QApplication(sys.argv)
     app.setOrganizationName(ORG_NAME)
     app.setApplicationName(APP_NAME)

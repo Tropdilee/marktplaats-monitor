@@ -1,4 +1,4 @@
-# MIAW Marktplaats Monitor v4.0
+# MIAW Marktplaats Monitor v4.1
 
 *[Nederlands](README.md) · English*
 
@@ -121,7 +121,10 @@ Marktplaats publishes no limit and sends no rate-limit headers, so the app keeps
 its distance on its own:
 
 - at least 5 seconds between two requests, whatever the app asks for;
-- interval of at least 30 seconds, with 20% jitter so no fixed rhythm emerges;
+- interval of at least 30 seconds, with 20% spread so checks are spread out
+  over time rather than all landing on the same beat;
+- every request identifies the app with its own User-Agent - name, version and
+  a link to this repository - instead of posing as a web browser;
 - **adaptive interval** — during quiet spells the wait grows (×1.5 up to the
   configured maximum) and on a new listing it returns to the configured speed
   immediately;
@@ -179,7 +182,9 @@ ui/dialogs.py           search profile and appearance windows
 ui/theme.py             colours, font size and stylesheet
 ```
 
-Settings live in QSettings (on Linux under `~/.config/PerplexityLocal/`).
+Settings live in QSettings (on Linux in `~/.config/MIAW/`). Versions before
+4.1 used `PerplexityLocal` instead of `MIAW`; settings and data move across
+automatically on the first start of 4.1.
 
 The Telegram token deliberately does not sit there: it goes into the system
 keyring (GNOME Keyring or KWallet on Linux, Keychain on macOS, Credential Manager
