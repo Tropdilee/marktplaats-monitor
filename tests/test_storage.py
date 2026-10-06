@@ -64,6 +64,13 @@ class SavedListTests(unittest.TestCase):
         self.assertEqual(self.manager.load_list("mijn lijst"), items)
         self.assertEqual(self.manager.list_names(), ["mijn lijst"])
 
+    def test_list_from_an_older_version_keeps_its_name(self):
+        old = self.lists_dir / "fietsen (2026).json"
+        old.write_text(json.dumps([{"id": "m1"}]), encoding="utf-8")
+        self.assertEqual(self.manager.load_list("fietsen (2026)"), [{"id": "m1"}])
+        self.manager.save_list("fietsen (2026)", [{"id": "m1"}, {"id": "m2"}])
+        self.assertEqual(self.manager.list_names(), ["fietsen (2026)"])
+
     def test_missing_list_reads_as_empty(self):
         self.assertEqual(self.manager.load_list("bestaat niet"), [])
 

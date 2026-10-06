@@ -51,6 +51,14 @@ class SavedListsManager:
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
     def _path(self, name, suffix):
+        # A list that already exists keeps its exact name. Lists saved by older
+        # versions may contain characters the cleaning now replaces, such as
+        # "fietsen (2026)"; cleaning those would point at a different, empty
+        # file. The name can only match if the file is directly in the folder,
+        # so this cannot be used to reach anywhere else.
+        if name in self.list_names():
+            return self.base_dir / f"{name}{suffix}"
+
         cleaned = clean_list_name(name)
         if not cleaned:
             raise InvalidListName(tr("invalid_list_name"))

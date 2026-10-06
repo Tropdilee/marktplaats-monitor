@@ -2145,6 +2145,18 @@ class MainWindow(QMainWindow):
             self.apply_theme()
 
 
+class _ErrorReporter(QObject):
+    """Carries an error report to the GUI thread.
+
+    Exceptions from background threads reach sys.excepthook too, and opening a
+    dialog from such a thread is itself a crash. Emitting a signal is safe from
+    any thread; Qt delivers it on the thread this object lives on, which is the
+    GUI thread.
+    """
+
+    report = pyqtSignal(str)
+
+
 def install_error_handler():
     """Show unexpected errors instead of letting the app vanish.
 
@@ -2154,6 +2166,17 @@ def install_error_handler():
     and shown in a dialog, and the app keeps running.
     """
     log_path = data_file("crash.log")
+    reporter = _ErrorReporter()
+
+    def show(summary):
+        if QApplication.instance() is not None:
+            QMessageBox.critical(
+                None,
+                tr("unexpected_error_title"),
+                tr("unexpected_error_body").format(fout=summary, pad=log_path),
+            )
+
+    reporter.report.connect(show)
 
     def handle(exc_type, exc, tb):
         if issubclass(exc_type, KeyboardInterrupt):
@@ -2166,16 +2189,11 @@ def install_error_handler():
         except OSError:
             pass
         print(details, file=sys.stderr)
-        if QApplication.instance() is not None:
-            QMessageBox.critical(
-                None,
-                tr("unexpected_error_title"),
-                tr("unexpected_error_body").format(
-                    fout=f"{exc_type.__name__}: {exc}", pad=log_path
-                ),
-            )
+        reporter.report.emit(f"{exc_type.__name__}: {exc}")
 
     sys.excepthook = handle
+    # Keep the reporter alive for as long as the hook can fire.
+    install_error_handler.reporter = reporter
 
 
 def main():
