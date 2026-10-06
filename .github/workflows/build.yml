@@ -16,7 +16,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          # Pinned rather than ubuntu-latest: a PyInstaller bundle only runs on
+          # systems with the same or a newer glibc than the build machine. This
+          # one needs glibc 2.38, so it runs on Ubuntu 24.04 and newer; built on
+          # a newer Ubuntu it would stop running on 24.04.
+          - os: ubuntu-24.04
             label: linux
           - os: windows-latest
             label: windows
@@ -26,9 +30,9 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -82,7 +86,7 @@ jobs:
           Compress-Archive -Path "dist\MIAW Marktplaats Monitor" `
             -DestinationPath "dist\MIAW-Marktplaats-Monitor-windows.zip" -Force
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: MIAW-Marktplaats-Monitor-${{ matrix.label }}
           path: |
@@ -94,13 +98,13 @@ jobs:
   release:
     needs: build
     if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: downloads
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           files: downloads/**/*

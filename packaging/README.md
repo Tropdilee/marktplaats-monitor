@@ -45,6 +45,10 @@ tar xzf MIAW-Marktplaats-Monitor-linux.tar.gz
 "./MIAW Marktplaats Monitor/MIAW Marktplaats Monitor"
 ```
 
+De Linux-versie heeft Ubuntu 24.04 of nieuwer nodig, of een andere distributie
+met glibc 2.38 of nieuwer. Op een ouder systeem stopt hij met de melding
+"GLIBC_2.38 not found".
+
 Klaagt de app over het `xcb`-platform, dan ontbreekt er een systeembibliotheek:
 
 ```bash
